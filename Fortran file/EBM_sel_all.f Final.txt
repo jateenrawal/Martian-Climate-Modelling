@@ -1,0 +1,2215 @@
+c  ------------------------------------------------
+c   EBM : routine principale
+c  ------------------------------------------------
+
+      implicit none
+      integer nb,nl,neq,nm,nday,nyear
+      parameter (nb=18,nl=2,neq=nb*nl,nm=12,nday=668)
+      COMMON /GEN/ PI,CHEAT(NB,0:nl),GRAV,REARTH,SEARTH,ITER
+      double precision PI,CHEAT,GRAV,REARTH,SEARTH
+      integer ITER
+      COMMON /DIFU/ DIFS(0:NB),DIFL(0:NB),DIFO(0:NB),DIFZ(0:NB)
+      double precision DIFS,DIFL,DIFO,DIFZ
+      COMMON /CLIM/ temp(NB,0:nl),SOL(NB,0:nl),ALB(NB,0:nl),FIR(NB,0:nl)
+     1             ,DFMER(NB,0:nl),PHI(NB),XLAT(NB),A1,A2,B1,B2
+     2             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES(NB,0:nl)
+     3             ,PHI1(NB),PHI2(NB),CC0,DD0,ELEVL(NB,0:nl)
+     4             ,ELEV(NB,0:nl),PTEM(NB,0:nl),PS(NB,0:nl),XL(NB,0:nl)
+     5             ,DFZON(NB,0:nl),DIST(NB,0:nl),SURF(NB,0:nl),GAMA
+      double precision temp,SOL,ALB,FIR,DFMER,PHI,XLAT,A1,A2,B1,B2
+     1             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES
+     2             ,PHI1,PHI2,CC0,DD0,ELEVL,ELEV,PTEM,PS,XL
+     3             ,DFZON,DIST,SURF,GAMA
+      COMMON /MTH/ temp_m(NB,0:nl,0:nm),PTEM_m(NB,0:nl,0:nm)
+     1            ,ALB_m(NB,0:nl,0:nm),SOL_m(NB,0:nl,0:nm)
+     1            ,FIR_m(NB,0:nl,0:nm),DFMER_m(NB,0:nl,0:nm)
+     1            ,fnet_m(NB,0:nl,0:nm),FMER_m(0:NB,0:nm)
+     1            ,FMSEN_m(0:NB,0:nm),FMLAT_m(0:NB,0:nm)
+     1            ,FMOC_m(0:NB,0:nm)
+     1            ,fi_m(NB,0:nl,0:nm),fsnw_m(NB,0:nl,0:nm)
+     1            ,TEMGL_m(0:nm),ALBGL_m(0:nm),ALBSGL_m(0:nm)
+     1            ,nyr,nyrprv,nmth,mlength(nm),imonth(nday)
+     1            ,nummth(0:nm)
+      double precision temp_m,PTEM_m,ALB_m,SOL_m,FIR_m,DFMER_m,fnet_m
+     1            ,FMER_m,FMSEN_m,FMLAT_m,FMOC_m,fi_m,fsnw_m,TEMGL_m
+     2            ,ALBGL_m,ALBSGL_m
+      integer nyr,nyrprv,nmth,mlength,imonth,nummth         
+      COMMON /ALBE/ FO(NB,0:nl),FCLD(NB,0:nl),FI(NB,0:nl),ZEN(NB),
+     1              CZEN(NB),ALBL(NB,0:nl),ALICE,ALOC,ALC0,ALC1,
+     2              ALCR(NB,0:nl),ALCY(NB,0:nl),alb_surf(nb,0:nl),
+     3              FSNW(NB,0:nl),ALSNW,TSUP_ICE,TINF_ICE,TSUP_SNW,
+     4              TINF_SNW
+      double precision FO,FCLD,FI,ZEN,CZEN,ALBL,
+     1    ALICE,ALOC,ALC0,ALC1,ALCR,ALCY,alb_surf,FSNW,ALSNW,TSUP_ICE,
+     2    TINF_ICE,TSUP_SNW,TINF_SNW 
+      COMMON /RANS/ CPDRY,CPH2O,RDRY,FMER(0:NB),FMSEN(0:NB),FMLAT(0:NB),
+     1              FMOC(0:NB),FZON(NB,0:nl),FZSEN(0:nl),FZLAT(0:nl),
+     1              RML,RSOIL
+      double precision CPDRY,CPH2O,RDRY,FMER,FMSEN,FMLAT,FMOC,FZON,
+     1                 FZSEN,FZLAT,RML,RSOIL
+      COMMON /ORBIT/ EXC,OBL,SMA,SUNEA,XLSPER
+      double precision EXC,OBL,SMA,SUNEA,XLSPER
+      common /CO2/ pco2
+      double precision pco2
+      COMMON /PATH/ KMAX,KOUNT,DXSAV,XP(200),YP(10,200)
+      integer KMAX,KOUNT
+      double precision DXSAV,XP,YP
+      COMMON /TEMPS/ time0,dn,imth
+      double precision time0,dn
+      integer imth
+      COMMON /DEBG/ kdebug
+      integer kdebug     
+       
+      DOUBLE PRECISION y(neq),drv(neq)
+      double precision tbegin,tend,step_prt,step_min,step_max,eps
+      integer nyprt
+      
+      character*200 dirname
+      
+      write(*,*)'Enter the path of the directory to store the results'
+      write(*,*)'(the path must end by "/")'      
+      read(*,'(a200)')dirname
+      
+      call make_directory(dirname)
+
+      write(*,*)'Enter total number of years for the integration' 
+      read(*,*)nyear         
+
+c    kdebug = flag for debugging 
+c       kdebug = 1 printing every timestep
+c       kdebug = 0 printing only after pre-defined time step (step_prt)       
+      kdebug = 0
+
+c    Full result file (last nyprt years)
+      open(21,file=trim(dirname)//'EBM_results_earth_seasonal.res')
+
+c    Result files (seasonal and yearly)
+      open(10,file=trim(dirname)//'EBM_results_seasonal.res') 
+      open(11,file=trim(dirname)//'EBM_results_yearly_mean.res')      
+
+      write(10,110)'Time (yr)','iyr','m','dn','pCO2','xlum'
+     &              ,'MTem -85','MTem -75'
+     &              ,'MTem -65','MTem -55','MTem -45','MTem -35'
+     &              ,'MTem -25','MTem -15','MTem -5','MTem 5','MTem 15'
+     &              ,'MTem 25','MTem 35','MTem 45','MTem 55','MTem 65'
+     &              ,'MTem 75','MTem 85'
+     &              ,'OTem -85','OTem -75'
+     &              ,'OTem -65','OTem -55','OTem -45','OTem -35'
+     &              ,'OTem -25','OTem -15','OTem -5','OTem 5','OTem 15'
+     &              ,'OTem 25','OTem 35','OTem 45','OTem 55','OTem 65'
+     &              ,'OTem 75','OTem 85'
+     &              ,'LTem -85','LTem -75'
+     &              ,'LTem -65','LTem -55','LTem -45','LTem -35'
+     &              ,'LTem -25','LTem -15','LTem -5','LTem 5','LTem 15'
+     &              ,'LTem 25','LTem 35','LTem 45','LTem 55','LTem 65'
+     &              ,'LTem 75','LTem 85'
+110   format(a11,1x,a8,1x,a2,1x,a8,1x,a11,1x,a9,3(18(1x,a9)))
+       
+      nyrprv = -1
+
+      KMAX=0
+      TEMGL=0.
+      ALBGL=0.
+      ALBSGL=0.
+      
+      CALL CONST_EBM
+      CALL INIT_EBM (y)
+
+c beginning time for integration (yr)
+      tbegin = 0.
+c final time for integration (yr) 
+      tend = dble(nyear)
+c time step for printing (yr)     
+      step_prt = 1./12.
+c minimum step allowed in ODE solver      
+      step_min = 1.0d-13   !0.0000001 !Martian condition     		Updated!
+c maximum step allowed in ODE solver      
+      step_max = step_prt
+c requested precision in ODE solver     
+      eps = 1.d-3        !eps = 1.d-9					Updated !
+c number of years to print in unit 21      
+      nyprt = 10
+      
+      time0 = tbegin-0.5*step_prt
+      
+
+      call ode(tbegin,tend,y,step_prt,step_min,step_max,eps,nyprt)
+ 
+      call givedrv(tend,y,drv)  
+
+      close(21)
+      close(10)
+      close(11)
+
+      stop
+      end
+       
+
+      subroutine printing(time,y,drv,stept)
+c     -----------------------------------------
+      implicit none
+      integer nb,nl,neq,nm,nday
+      parameter (nb=18,nl=2,neq=nb*nl,nm=12,nday=668)
+      COMMON /CLIM/ temp(NB,0:nl),SOL(NB,0:nl),ALB(NB,0:nl),FIR(NB,0:nl)
+     1             ,DFMER(NB,0:nl),PHI(NB),XLAT(NB),A1,A2,B1,B2
+     2             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES(NB,0:nl)
+     3             ,PHI1(NB),PHI2(NB),CC0,DD0,ELEVL(NB,0:nl)
+     4             ,ELEV(NB,0:nl),PTEM(NB,0:nl),PS(NB,0:nl),XL(NB,0:nl)
+     5             ,DFZON(NB,0:nl),DIST(NB,0:nl),SURF(NB,0:nl),GAMA
+      double precision temp,SOL,ALB,FIR,DFMER,PHI,XLAT,A1,A2,B1,B2
+     1             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES
+     2             ,PHI1,PHI2,CC0,DD0,ELEVL,ELEV,PTEM,PS,XL
+     3             ,DFZON,DIST,SURF,GAMA
+      COMMON /ALBE/ FO(NB,0:nl),FCLD(NB,0:nl),FI(NB,0:nl),ZEN(NB),
+     1              CZEN(NB),ALBL(NB,0:nl),ALICE,ALOC,ALC0,ALC1,
+     2              ALCR(NB,0:nl),ALCY(NB,0:nl),alb_surf(nb,0:nl),
+     3              FSNW(NB,0:nl),ALSNW,TSUP_ICE,TINF_ICE,TSUP_SNW,
+     4              TINF_SNW
+      double precision FO,FCLD,FI,ZEN,CZEN,ALBL,
+     1    ALICE,ALOC,ALC0,ALC1,ALCR,ALCY,alb_surf,FSNW,ALSNW,TSUP_ICE,
+     2    TINF_ICE,TSUP_SNW,TINF_SNW     
+      COMMON /MTH/ temp_m(NB,0:nl,0:nm),PTEM_m(NB,0:nl,0:nm)
+     1            ,ALB_m(NB,0:nl,0:nm),SOL_m(NB,0:nl,0:nm)
+     1            ,FIR_m(NB,0:nl,0:nm),DFMER_m(NB,0:nl,0:nm)
+     1            ,fnet_m(NB,0:nl,0:nm),FMER_m(0:NB,0:nm)
+     1            ,FMSEN_m(0:NB,0:nm),FMLAT_m(0:NB,0:nm)
+     1            ,FMOC_m(0:NB,0:nm)
+     1            ,fi_m(NB,0:nl,0:nm),fsnw_m(NB,0:nl,0:nm)
+     1            ,TEMGL_m(0:nm),ALBGL_m(0:nm),ALBSGL_m(0:nm)
+     1            ,nyr,nyrprv,nmth,mlength(nm),imonth(nday)
+     1            ,nummth(0:nm)
+      double precision temp_m,PTEM_m,ALB_m,SOL_m,FIR_m,DFMER_m,fnet_m
+     1            ,FMER_m,FMSEN_m,FMLAT_m,FMOC_m,fi_m,fsnw_m,TEMGL_m
+     2            ,ALBGL_m,ALBSGL_m
+      COMMON /RANS/ CPDRY,CPH2O,RDRY,FMER(0:NB),FMSEN(0:NB),FMLAT(0:NB),
+     1              FMOC(0:NB),FZON(NB,0:nl),FZSEN(0:nl),FZLAT(0:nl),
+     1              RML,RSOIL
+      double precision CPDRY,CPH2O,RDRY,FMER,FMSEN,FMLAT,FMOC,FZON,
+     1                 FZSEN,FZLAT,RML,RSOIL
+      integer nyr,nyrprv,nmth,mlength,imonth,nummth
+      COMMON /ORBIT/ EXC,OBL,SMA,SUNEA,XLSPER
+      double precision EXC,OBL,SMA,SUNEA,XLSPER
+      COMMON /TEMPS/ time0,dn,imth
+      double precision time0,dn
+      integer imth
+      common /CO2/ pco2
+      double precision pco2
+
+      character*1 tab
+      character*120 formprt
+      
+      integer i,j,m,idn,ncol
+      
+      DOUBLE PRECISION y(neq),drv(neq),time,stept,timedif
+      double precision TOBS(NB),fnet_0,fnet
+
+      DATA TOBS /230.8,243.6,266.3,276.0,283.0,289.6,294.5,297.7,299.2
+     &          ,299.6,299.2,296.0,289.3,281.9,275.3,268.0,260.8,256.2/ 
+     
+c      tab = char(9)
+      tab = ' '           
+
+      timedif = time-time0
+      
+      if (timedif.gt.0) then
+        nyr = int(timedif)
+        dn = float(nday)*(timedif-float(nyr))
+      else
+        nyr = int(timedif-1.)
+        dn = float(nday)*(timedif-float(nyr))
+      endif
+       
+       if (nyr.ne.nyrprv) then
+        write(*,*)'Year : ',nyr
+        do m= 0, nm
+	 if (nummth(m).gt.0) then
+          temgl_m(m)=temgl_m(m)/nummth(m)
+	  albgl_m(m)=albgl_m(m)/nummth(m)
+	  albsgl_m(m)=albsgl_m(m)/nummth(m)
+          fmer_m(0,m)=fmer_m(0,m)/nummth(m)
+          fmsen_m(0,m)=fmsen_m(0,m)/nummth(m)
+          fmlat_m(0,m)=fmlat_m(0,m)/nummth(m)
+          fmoc_m(0,m)=fmoc_m(0,m)/nummth(m)
+          do i = 1, nb
+           fmer_m(i,m)=fmer_m(i,m)/nummth(m)
+           fmsen_m(i,m)=fmsen_m(i,m)/nummth(m)
+           fmlat_m(i,m)=fmlat_m(i,m)/nummth(m)
+           fmoc_m(i,m)=fmoc_m(i,m)/nummth(m)
+           do j = 0, nl
+            temp_m(i,j,m)=temp_m(i,j,m)/nummth(m)
+            ptem_m(i,j,m)=ptem_m(i,j,m)/nummth(m)
+	    sol_m(i,j,m)=sol_m(i,j,m)/nummth(m)
+	    if (sol_m(i,j,m).ge.1.e-5) then
+	      alb_m(i,j,m)=alb_m(i,j,m)/(sol_m(i,j,m)*nummth(m))
+	    else
+	      alb_m(i,j,m)=-0.99999
+	    endif
+	    fir_m(i,j,m)=fir_m(i,j,m)/nummth(m)
+	    dfmer_m(i,j,m)=dfmer_m(i,j,m)/nummth(m)
+	    fi_m(i,j,m)=fi_m(i,j,m)/nummth(m)
+	    fsnw_m(i,j,m)=fsnw_m(i,j,m)/nummth(m)
+	    fnet_m(i,j,m)=fnet_m(i,j,m)/nummth(m)
+           end do
+          end do
+	 endif
+        end do         
+	if (nummth(0).gt.0) then
+	
+	 write(11,'(a40,f14.5)')'ANNUAL MEAN VALUES'
+	 write(11,'(a40,i8)')'NYR = ',nyr
+	 write(11,'(a40,f14.5)')'GLOBAL MEAN TEMPERATURE = ',temgl_m(0)
+	 write(11,'(a40,f14.5)')'GLOBAL MEAN PLANETARY ALBEDO = '
+     &                         ,albgl_m(0)
+	 write(11,'(a40,f14.5)')'GLOBAL MEAN SURFACE ALBEDO = '
+     &                         ,albsgl_m(0)
+c         WRITE(11,130)'PHI  ','XLAT  ','SURF  ','TEMP   ','TOBS   '
+c     &      ,'ALB  ','FICE ','FSNOW','SOLAR FLUX','FIR FLUX  '
+c     &      ,'-DIV(FMER)','FNET'
+         WRITE(11,130)'PHI',tab,'XLAT',tab,'SURF',tab,'ELEV',tab,'PTEM'
+     &    ,tab,'TEMP',tab,'TOBS',tab,'ALB',tab,'FICE',tab,'FSNOW'
+     &    ,tab,'SOLAR_FLUX',tab,'FIR_FLUX  ',tab,'-DIV(FMER)'
+     &    ,tab,'FNET',tab,'FMER',tab,'FMSEN',tab,'FMLAT',tab,'FMOC',tab    
+         DO I=1,NB
+c          FNET_0=XLUM*SOL_m(i,0,0)*(1.-ALB_m(i,0,0))-FIR_m(i,0,0)+DFMER_m(i,0,0)
+c          WRITE(11,131)PHI(I),XLAT(I),SURF(I,0),TEMP_m(i,0,0),TOBS(I)
+c     &      ,ALB_m(i,0,0),FI_m(i,0,0),FSNW_m(i,0,0),XLUM*SOL_m(i,0,0),FIR_m(i,0,0)
+c     &      ,DFMER_m(i,0,0),FNET_m(i,0,0)
+          WRITE(11,131)PHI(I),tab,XLAT(I),tab,SURF(I,0),tab,ELEV(I,0)
+     &      ,tab,PTEM_m(i,0,0),tab,TEMP_m(i,0,0),tab,TOBS(I),tab
+     &      ,ALB_m(i,0,0)
+     &      ,tab,FI_m(i,0,0),tab,FSNW_m(i,0,0),tab,XLUM*SOL_m(i,0,0)
+     &      ,tab,FIR_m(i,0,0),tab,DFMER_m(i,0,0),tab,FNET_m(i,0,0)     
+     &      ,tab,FMER_m(i,0),tab,FMSEN_m(i,0),tab,FMLAT_m(i,0)
+     &      ,tab,FMOC_m(i,0),tab
+         END DO
+        
+c130     FORMAT(1x,  a5,  2(1x,a6),  2(1x,a7),  3(1x,a5),  4(1x,a10))
+c131     FORMAT(1x,f5.1,2(1x,f6.3),2(1x,f7.3),3(1x,f5.3),4(1x,e10.3))
+
+130     FORMAT(1x,a5,2(a1,a6),a1,a7,3(a1,a7),3(a1,a6),8(a1,a10),a1)
+131     FORMAT(1x,f5.1,2(a1,f6.3),a1,f7.0,3(a1,f7.3),3(a1,f6.3),
+     &        8(a1,e10.3),a1)
+
+c130     FORMAT(1x,12(a12,a1))
+c131     FORMAT(1x,12(e12.5,a1))
+	endif 
+	   
+        nyrprv = nyr
+	
+        do m= 0, nm
+         nummth(m)=0
+         temgl_m(m)=0.
+	 albgl_m(m)=0.
+	 albsgl_m(m)=0.
+         fmer_m(0,m)=0.
+         fmsen_m(0,m)=0
+         fmlat_m(0,m)=0
+         fmoc_m(0,m)=0
+         do i = 1, nb
+          fmer_m(i,m)=0.
+          fmsen_m(i,m)=0
+          fmlat_m(i,m)=0
+          fmoc_m(i,m)=0
+          do j = 0, nl
+           temp_m(i,j,m)=0.
+           ptem_m(i,j,m)=0.
+	   sol_m(i,j,m)=0.
+	   alb_m(i,j,m)=0.
+	   fir_m(i,j,m)=0.
+	   dfmer_m(i,j,m)=0.
+	   fi_m(i,j,m)=0.
+	   fsnw_m(i,j,m)=0.
+	   fnet_m(i,j,m)=0.
+          end do
+         end do
+        end do
+	 	
+       endif
+      
+       idn = int(dn+1)
+       imth = imonth(idn)
+       nummth(0)=nummth(0)+1
+       nummth(imth)=nummth(imth)+1
+       temgl_m(0)=temgl_m(0)+temgl
+       temgl_m(imth)=temgl_m(imth)+temgl
+       albgl_m(0)=albgl_m(0)+albgl
+       albgl_m(imth)=albgl_m(imth)+albgl
+       albsgl_m(0)=albsgl_m(0)+albsgl
+       albsgl_m(imth)=albsgl_m(imth)+albsgl   
+       fmer_m(0,0)=fmer_m(0,0)+FMER(0)
+       fmsen_m(0,0)=fmsen_m(0,0)+FMSEN(0)
+       fmlat_m(0,0)=fmlat_m(0,0)+FMLAT(0)
+       fmoc_m(0,0)=fmoc_m(0,0)+FMOC(0)           
+       do i = 1,nb
+        fmer_m(i,0)=fmer_m(i,0)+FMER(i)
+        fmsen_m(i,0)=fmsen_m(i,0)+FMSEN(i)
+        fmlat_m(i,0)=fmlat_m(i,0)+FMLAT(i)
+        fmoc_m(i,0)=fmoc_m(i,0)+FMOC(i)
+        do j = 0, nl
+        fnet = XLUM*SOL(i,j)*(1.-ALB(i,j))-FIR(i,j)+DFMER(i,j)
+        temp_m(i,j,0)=temp_m(i,j,0)+temp(i,j)
+        ptem_m(i,j,0)=ptem_m(i,j,0)+ptem(i,j) 
+	sol_m(i,j,0)=sol_m(i,j,0)+xlum*sol(i,j)
+	alb_m(i,j,0)=alb_m(i,j,0)+xlum*sol(i,j)*alb(i,j)
+	fir_m(i,j,0)=fir_m(i,j,0)+fir(i,j)
+	dfmer_m(i,j,0)=dfmer_m(i,j,0)+dfmer(i,j)
+	fi_m(i,j,0)=fi_m(i,j,0)+fi(i,j)
+	fsnw_m(i,j,0)=fsnw_m(i,j,0)+fsnw(i,j)
+	fnet_m(i,j,0)=fnet_m(i,j,0)+fnet       
+        temp_m(i,j,imth)=temp_m(i,j,imth)+temp(i,j) 
+        ptem_m(i,j,imth)=ptem_m(i,j,imth)+ptem(i,j)
+	sol_m(i,j,imth)=sol_m(i,j,imth)+xlum*sol(i,j)
+	alb_m(i,j,imth)=alb_m(i,j,imth)+xlum*sol(i,j)*alb(i,j)
+	fir_m(i,j,imth)=fir_m(i,j,imth)+fir(i,j)
+	dfmer_m(i,j,imth)=dfmer_m(i,j,imth)+dfmer(i,j)
+	fi_m(i,j,imth)=fi_m(i,j,imth)+fi(i,j)
+	fsnw_m(i,j,imth)=fsnw_m(i,j,imth)+fsnw(i,j)
+	fnet_m(i,j,imth)=fnet_m(i,j,imth)+fnet
+        end do	
+       end do
+       
+       ncol=nb*(nl+1)
+       write(formprt,'(a44,i4,a10)')
+     & '(f11.6,1x,i8,1x,i2,1x,f8.3,1x,f11.3,1x,f7.3,',ncol,'(3x,f7.2))'
+       write(10,formprt)time,nyr,imth,dn,pco2,xlum,
+     &                  ((temp(i,j),i=1,nb),j=0,nl)
+c120    format(f11.6,1x,i8,1x,i2,1x,f8.3,1x,f11.3,1x,f7.3,54(3x,f7.2))
+       
+       
+      return
+      end
+       
+       
+c     ------------------------------
+      subroutine givedrv(time,y,drv)
+c     ------------------------------
+
+      implicit none
+      integer nb,nl,neq,nm,nday      
+      parameter (nb=18,nl=2,neq=nb*nl,nm=12,nday=668)
+
+      COMMON /GEN/ PI,CHEAT(NB,0:nl),GRAV,REARTH,SEARTH,ITER
+      double precision PI,CHEAT,GRAV,REARTH,SEARTH
+      integer ITER      
+      COMMON /CLIM/ temp(NB,0:nl),SOL(NB,0:nl),ALB(NB,0:nl),FIR(NB,0:nl)
+     1             ,DFMER(NB,0:nl),PHI(NB),XLAT(NB),A1,A2,B1,B2
+     2             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES(NB,0:nl)
+     3             ,PHI1(NB),PHI2(NB),CC0,DD0,ELEVL(NB,0:nl)
+     4             ,ELEV(NB,0:nl),PTEM(NB,0:nl),PS(NB,0:nl),XL(NB,0:nl)
+     5             ,DFZON(NB,0:nl),DIST(NB,0:nl),SURF(NB,0:nl),GAMA
+      double precision temp,SOL,ALB,FIR,DFMER,PHI,XLAT,A1,A2,B1,B2
+     1             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES
+     2             ,PHI1,PHI2,CC0,DD0,ELEVL,ELEV,PTEM,PS,XL
+     3             ,DFZON,DIST,SURF,GAMA
+      COMMON /MTH/ temp_m(NB,0:nl,0:nm),PTEM_m(NB,0:nl,0:nm)
+     1            ,ALB_m(NB,0:nl,0:nm),SOL_m(NB,0:nl,0:nm)
+     1            ,FIR_m(NB,0:nl,0:nm),DFMER_m(NB,0:nl,0:nm)
+     1            ,fnet_m(NB,0:nl,0:nm),FMER_m(0:NB,0:nm)
+     1            ,FMSEN_m(0:NB,0:nm),FMLAT_m(0:NB,0:nm)
+     1            ,FMOC_m(0:NB,0:nm)
+     1            ,fi_m(NB,0:nl,0:nm),fsnw_m(NB,0:nl,0:nm)
+     1            ,TEMGL_m(0:nm),ALBGL_m(0:nm),ALBSGL_m(0:nm)
+     1            ,nyr,nyrprv,nmth,mlength(nm),imonth(nday)
+     1            ,nummth(0:nm)
+      double precision temp_m,PTEM_m,ALB_m,SOL_m,FIR_m,DFMER_m,fnet_m
+     1            ,FMER_m,FMSEN_m,FMLAT_m,FMOC_m,fi_m,fsnw_m,TEMGL_m
+     2            ,ALBGL_m,ALBSGL_m
+      integer nyr,nyrprv,nmth,mlength,imonth,nummth
+      COMMON /RANS/ CPDRY,CPH2O,RDRY,FMER(0:NB),FMSEN(0:NB),FMLAT(0:NB),
+     1              FMOC(0:NB),FZON(NB,0:nl),FZSEN(0:nl),FZLAT(0:nl),
+     1              RML,RSOIL
+      double precision CPDRY,CPH2O,RDRY,FMER,FMSEN,FMLAT,FMOC,FZON,
+     1                 FZSEN,FZLAT,RML,RSOIL         
+      COMMON /ALBE/ FO(NB,0:nl),FCLD(NB,0:nl),FI(NB,0:nl),ZEN(NB),
+     1              CZEN(NB),ALBL(NB,0:nl),ALICE,ALOC,ALC0,ALC1,
+     2              ALCR(NB,0:nl),ALCY(NB,0:nl),alb_surf(nb,0:nl),
+     3              FSNW(NB,0:nl),ALSNW,TSUP_ICE,TINF_ICE,TSUP_SNW,
+     4              TINF_SNW
+      double precision FO,FCLD,FI,ZEN,CZEN,ALBL,
+     1    ALICE,ALOC,ALC0,ALC1,ALCR,ALCY,alb_surf,FSNW,ALSNW,TSUP_ICE,
+     2    TINF_ICE,TSUP_SNW,TINF_SNW 
+      COMMON /ARELAT/ AREA_LAND(NB),AREA_SHELF(NB)
+      double precision AREA_LAND,AREA_SHELF             
+      COMMON /ORBIT/ EXC,OBL,SMA,SUNEA,XLSPER
+      double precision EXC,OBL,SMA,SUNEA,XLSPER
+      COMMON /TEMPS/ time0,dn,imth
+      double precision time0,dn
+      integer imth
+      common /CO2/ pco2
+      double precision pco2  
+  
+      DOUBLE PRECISION y(neq),drv(neq),time,timedif
+      double precision A0,B0,TCELS,TEM0,puis_p,puis_t,sold(nb)
+      integer i,j,ieq
+
+      timedif = time-time0
+
+      if (timedif.gt.0) then
+        nyr = int(timedif)
+        dn = float(nday)*(timedif-float(nyr))
+      else
+        nyr = int(timedif-1.)
+        dn = float(nday)*(timedif-float(nyr))
+      endif
+                  
+      CALL SOLDAY(XLAT,DN,SOLD,ZEN,CZEN)
+      
+      TEMGL=0
+      puis_p=GRAV/(GAMA*RDRY)
+      puis_t=RDRY/CPDRY
+ 
+      DO i=1,NB
+       DO j=1,nl
+        ieq=(i-1)*nl+j
+        temp(i,j) = y(ieq)
+        sol(i,j) = sold(i)
+        elev(i,j)=max(0.,(1.-fo(i,j))*ELEVL(I,J))
+        TEM0=temp(i,j)+GAMA*ELEV(I,J)
+        ps(i,j) = PRE*(TEMP(I,j)/TEM0)**puis_p
+        ptem(i,j) = temp(i,j)
+     &      *(610./ps(i,j))**puis_t				!updated
+       end do
+       temp(i,0)=0.
+       sol(i,0)=0.
+       elev(i,0)=0.
+       ps(i,0)=0.
+       ptem(i,0)=0.
+       DO j=1,nl
+        TEMGL = TEMGL + temp(i,j)*SURF(i,j)
+        temp(i,0) = temp(i,0) + temp(i,j)*SURF(i,j)/SURF(i,0)
+        sol(i,0) = sol(i,0) + sol(i,j)*SURF(i,j)/SURF(i,0)
+        elev(i,0) = elev(i,0) + elev(i,j)*SURF(i,j)/SURF(i,0)
+        ps(i,0) = ps(i,0) + ps(i,j)*SURF(i,j)/SURF(i,0)
+        ptem(i,0) = ptem(i,0) + ptem(i,j)*SURF(i,j)/SURF(i,0)
+       end do       
+      END DO
+      
+      IF(PCO2.GE.280.)THEN
+         A0=A1+A2*DLOG(PCO2/280.)
+         B0=B1+B2*DLOG(PCO2/280.)
+        ELSE
+         A0=A1+A2*((PCO2/280.)-1)
+         B0=B1+B2*((PCO2/280.)-1)
+      ENDIF
+
+      CALL ALBEDO_BUD
+      CALL DFLMER
+      CALL DFLZON
+      
+      SOLGL = 0.
+      ALBGL = 0.
+      ALBSGL = 0.
+      DO I=1,NB
+       do j=1,nl
+        TCELS=temp(i,j)-273.15
+        FIR(i,j)=A0+B0*TCELS-(CC0+DD0*TCELS)*FCLD(i,j)
+       end do
+       fir(i,0)=0.
+       do j=1,nl
+        SOLGL = SOLGL + xlum*sol(i,j)*SURF(i,j)
+        ALBGL = ALBGL + alb(i,j)*xlum*sol(i,j)*SURF(i,j)
+        ALBSGL = ALBSGL + alb_surf(i,j)*xlum*sol(i,j)*SURF(i,j)
+        fir(i,0) = fir(i,0) + fir(i,j)*SURF(i,j)/SURF(i,0)
+       end do
+      END DO
+      ALBGL = ALBGL/SOLGL
+      ALBSGL = ALBSGL/SOLGL
+
+c   air temperature in latitude bands
+      do i=1,nb
+       do j=1,nl
+        ieq=(i-1)*nl+j
+        if (SURF(i,j) .gt. 1.d-10) then					! Updated
+         drv(ieq)=(XLUM*SOL(i,j)*(1.-ALB(i,j))-FIR(i,j)+DFMER(i,j)
+     &      +DFZON(i,j))*3.15E+7/CHEAT(i,j)
+        else
+         drv(ieq)=0.0d0
+        endif
+c        drv(ieq)=(XLUM*SOL(i,j)*(1.-ALB(i,j))-FIR(i,j)+DFMER(i,j))
+c     &       *3.15E+7/CHEAT(i,j)
+       end do
+      end do 
+      
+c      write(*,*)'dn: ',dn
+c      write(*,*)'temp: ',temp
+c      write(*,*)'zen: ',zen
+c      write(*,*)'fsnw: ',fsnw
+c      write(*,*)'fi: ',fi
+c      write(*,*)'sol: ',sol
+c      write(*,*)'alb: ',alb
+c      write(*,*)'fir: ',fir
+c      write(*,*)'dfmer: ',dfmer
+c      write(*,*)'cheat: ',cheat
+      
+c      stop
+           
+      return
+      end
+
+c     --------------------------
+      SUBROUTINE WRITE_EBM(time)
+C     --------------------------
+
+      implicit none
+      integer nb,nl,nm,nday
+      PARAMETER (NB=18,nl=2,nm=12,nday=668)
+
+      COMMON /GEN/ PI,CHEAT(NB,0:nl),GRAV,REARTH,SEARTH,ITER
+      double precision PI,CHEAT,GRAV,REARTH,SEARTH
+      integer ITER
+      COMMON /DIFU/ DIFS(0:NB),DIFL(0:NB),DIFO(0:NB),DIFZ(0:NB)
+      double precision DIFS,DIFL,DIFO,DIFZ
+      COMMON /CLIM/ temp(NB,0:nl),SOL(NB,0:nl),ALB(NB,0:nl),FIR(NB,0:nl)
+     1             ,DFMER(NB,0:nl),PHI(NB),XLAT(NB),A1,A2,B1,B2
+     2             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES(NB,0:nl)
+     3             ,PHI1(NB),PHI2(NB),CC0,DD0,ELEVL(NB,0:nl)
+     4             ,ELEV(NB,0:nl),PTEM(NB,0:nl),PS(NB,0:nl),XL(NB,0:nl)
+     5             ,DFZON(NB,0:nl),DIST(NB,0:nl),SURF(NB,0:nl),GAMA
+      double precision temp,SOL,ALB,FIR,DFMER,PHI,XLAT,A1,A2,B1,B2
+     1             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES
+     2             ,PHI1,PHI2,CC0,DD0,ELEVL,ELEV,PTEM,PS,XL
+     3             ,DFZON,DIST,SURF,GAMA
+      COMMON /MTH/ temp_m(NB,0:nl,0:nm),PTEM_m(NB,0:nl,0:nm)
+     1            ,ALB_m(NB,0:nl,0:nm),SOL_m(NB,0:nl,0:nm)
+     1            ,FIR_m(NB,0:nl,0:nm),DFMER_m(NB,0:nl,0:nm)
+     1            ,fnet_m(NB,0:nl,0:nm),FMER_m(0:NB,0:nm)
+     1            ,FMSEN_m(0:NB,0:nm),FMLAT_m(0:NB,0:nm)
+     1            ,FMOC_m(0:NB,0:nm)
+     1            ,fi_m(NB,0:nl,0:nm),fsnw_m(NB,0:nl,0:nm)
+     1            ,TEMGL_m(0:nm),ALBGL_m(0:nm),ALBSGL_m(0:nm)
+     1            ,nyr,nyrprv,nmth,mlength(nm),imonth(nday)
+     1            ,nummth(0:nm)
+      double precision temp_m,PTEM_m,ALB_m,SOL_m,FIR_m,DFMER_m,fnet_m
+     1            ,FMER_m,FMSEN_m,FMLAT_m,FMOC_m,fi_m,fsnw_m,TEMGL_m
+     2            ,ALBGL_m,ALBSGL_m
+      integer nyr,nyrprv,nmth,mlength,imonth,nummth     
+      COMMON /ALBE/ FO(NB,0:nl),FCLD(NB,0:nl),FI(NB,0:nl),ZEN(NB),
+     1              CZEN(NB),ALBL(NB,0:nl),ALICE,ALOC,ALC0,ALC1,
+     2              ALCR(NB,0:nl),ALCY(NB,0:nl),alb_surf(nb,0:nl),
+     3              FSNW(NB,0:nl),ALSNW,TSUP_ICE,TINF_ICE,TSUP_SNW,
+     4              TINF_SNW
+      double precision FO,FCLD,FI,ZEN,CZEN,ALBL,
+     1    ALICE,ALOC,ALC0,ALC1,ALCR,ALCY,alb_surf,FSNW,ALSNW,TSUP_ICE,
+     2    TINF_ICE,TSUP_SNW,TINF_SNW 
+      COMMON /RANS/ CPDRY,CPH2O,RDRY,FMER(0:NB),FMSEN(0:NB),FMLAT(0:NB),
+     1              FMOC(0:NB),FZON(NB,0:nl),FZSEN(0:nl),FZLAT(0:nl),
+     1              RML,RSOIL
+      double precision CPDRY,CPH2O,RDRY,FMER,FMSEN,FMLAT,FMOC,FZON,
+     1                 FZSEN,FZLAT,RML,RSOIL
+      COMMON /ORBIT/ EXC,OBL,SMA,SUNEA,XLSPER
+      double precision EXC,OBL,SMA,SUNEA,XLSPER
+      common /CO2/ pco2
+      double precision pco2
+      COMMON /TEMPS/ time0,dn,imth
+      double precision time0,dn
+      integer imth
+      COMMON /REGIONS/ namezone(0:nl)
+      character*10 namezone
+      
+      double precision TOBS(NB),FNET
+      double precision time,timedif
+      integer i,j
+
+      DATA TOBS /230.8,243.6,266.3,276.0,283.0,289.6,294.5,297.7,299.2
+     &          ,299.6,299.2,296.0,289.3,281.9,275.3,268.0,260.8,256.2/
+
+
+      timedif = time-time0
+      
+      if (timedif.gt.0) then
+        nyr = int(timedif)
+        dn = float(nday)*(timedif-float(nyr))
+      else
+        nyr = int(timedif-1.)
+        dn = float(nday)*(timedif-float(nyr))
+      endif      
+
+c      REWIND (21)
+
+      write(21,'(a40)')' '
+      write(21,'(a40,f14.5)')'TIME:',TIME
+      write(21,'(a40,f14.5)')'DAY:',dn
+      write(21,'(a40,i8)')'MONTH:',imonth(int(dn))
+      write(21,'(a40,f14.5)')'RELATIVE SOLAR LUMINOSITY:',XLUM
+      write(21,'(a40,f14.5)')'OBLIQUITY (DEG):',OBL
+      write(21,'(a40,f14.5)')'ECCENTRICITY :',EXC
+      write(21,'(a40,f14.5)')'LONGITUDE OF PERIHELION (DEG):',XLSPER
+      write(21,'(a40,f14.5)')'SEMI-MAJOR AXIS (UA):',SMA      
+      write(21,'(a40,f14.5)')'SURFACE GRAVITY (m s-2):',GRAV
+      write(21,'(a40,f14.5)')'PLANETARY RADIUS (m):',REARTH      
+      write(21,'(a40,f14.5)')'SEA LEVEL ATMOSPHERIC PRESSURE (Pa):',PRE
+      write(21,'(a40,f14.5)')'MEAN ATMOSPHERIC LAPSE RATE (K m-1):',GAMA      
+      write(21,'(a40,f14.5)')'ATMOSPHERIC PCO2 (ppmv):',pco2
+      write(21,'(a40,f14.5)')'GLOBAL MEAN TEMPERATURE (K):',TEMGL
+      write(21,'(a40,f14.5)')'GLOBAL MEAN PLANETARY ALBEDO (K):',ALBGL
+      write(21,'(a40,f14.5)')'GLOBAL MEAN SURFACE ALBEDO (K):',ALBSGL
+      write(21,'(a40)')' '    
+      WRITE(21,100)'PHI  ','XLAT  ','SURF  ','ELEV  ','DIST','PS    '
+     &        ,'temp   '
+     &        ,'PTEM ','FICE ','FSNOW','FOCEAN','FCLOUD','ALB  '
+     &        ,'ALCR ','ALCY ','SOLAR FLUX','FIR FLUX  ','-DIV(FZON)'
+     &        ,'-DIV(FMER)','FNET','FMOC','FMER','FMLAT','FZON','CHEAT'
+      DO j = 0, nl
+       WRITE(21,'(a10)')namezone(j)
+       DO I=1,NB
+        FNET = XLUM*SOL(I,J)*(1.-ALB(I,J))-FIR(I,J)+DFMER(I,J)
+        WRITE(21,101)PHI(I),XLAT(I),SURF(I,J),ELEV(i,j),DIST(I,J)
+     &             ,ps(i,j),temp(i,j),PTEM(i,j),FI(i,j),FSNW(I,j)
+     &             ,FO(i,j),FCLD(i,j),ALB(i,j),ALCR(i,j),ALCY(i,j)
+     &             ,XLUM*SOL(I,j),FIR(I,j),DFZON(I,J),DFMER(I,J),FNET
+     &             ,FMOC(I),FMER(I),FMLAT(I),FZON(I,J),cheat(i,j)
+       END DO
+      END DO
+
+100   FORMAT(1x,  a5,2(1x,a6)  ,1x,a6,  1x,a10,  1x,a8,  2(1x,a8),
+     &      7(1x,a6)  ,10(1x,a10))
+
+101   FORMAT(1x,f5.1,2(1x,f6.3),1x,f6.0,1x,e10.3,1x,f8.0,2(1x,f8.3),
+     &      7(1x,f6.3),10(1x,1pe10.3))
+
+      RETURN
+      END
+
+
+c     --------------------
+      SUBROUTINE CONST_EBM
+C     --------------------
+      implicit none
+      integer nb,nl,nm,nday
+      PARAMETER (NB=18,nl=2,nm=12,nday=668)
+      
+
+      COMMON /GEN/ PI,CHEAT(NB,0:nl),GRAV,REARTH,SEARTH,ITER
+      double precision PI,CHEAT,GRAV,REARTH,SEARTH
+      integer ITER      
+      COMMON /DIFU/ DIFS(0:NB),DIFL(0:NB),DIFO(0:NB),DIFZ(0:NB)
+      double precision DIFS,DIFL,DIFO,DIFZ
+      COMMON /ORBIT/ EXC,OBL,SMA,SUNEA,XLSPER
+      double precision EXC,OBL,SMA,SUNEA,XLSPER
+      COMMON /CLIM/ temp(NB,0:nl),SOL(NB,0:nl),ALB(NB,0:nl),FIR(NB,0:nl)
+     1             ,DFMER(NB,0:nl),PHI(NB),XLAT(NB),A1,A2,B1,B2
+     2             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES(NB,0:nl)
+     3             ,PHI1(NB),PHI2(NB),CC0,DD0,ELEVL(NB,0:nl)
+     4             ,ELEV(NB,0:nl),PTEM(NB,0:nl),PS(NB,0:nl),XL(NB,0:nl)
+     5             ,DFZON(NB,0:nl),DIST(NB,0:nl),SURF(NB,0:nl),GAMA
+      double precision temp,SOL,ALB,FIR,DFMER,PHI,XLAT,A1,A2,B1,B2
+     1             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES
+     2             ,PHI1,PHI2,CC0,DD0,ELEVL,ELEV,PTEM,PS,XL
+     3             ,DFZON,DIST,SURF,GAMA
+      COMMON /MTH/ temp_m(NB,0:nl,0:nm),PTEM_m(NB,0:nl,0:nm)
+     1            ,ALB_m(NB,0:nl,0:nm),SOL_m(NB,0:nl,0:nm)
+     1            ,FIR_m(NB,0:nl,0:nm),DFMER_m(NB,0:nl,0:nm)
+     1            ,fnet_m(NB,0:nl,0:nm),FMER_m(0:NB,0:nm)
+     1            ,FMSEN_m(0:NB,0:nm),FMLAT_m(0:NB,0:nm)
+     1            ,FMOC_m(0:NB,0:nm)
+     1            ,fi_m(NB,0:nl,0:nm),fsnw_m(NB,0:nl,0:nm)
+     1            ,TEMGL_m(0:nm),ALBGL_m(0:nm),ALBSGL_m(0:nm)
+     1            ,nyr,nyrprv,nmth,mlength(nm),imonth(nday)
+     1            ,nummth(0:nm)
+      double precision temp_m,PTEM_m,ALB_m,SOL_m,FIR_m,DFMER_m,fnet_m
+     1            ,FMER_m,FMSEN_m,FMLAT_m,FMOC_m,fi_m,fsnw_m,TEMGL_m
+     2            ,ALBGL_m,ALBSGL_m
+      integer nyr,nyrprv,nmth,mlength,imonth,nummth     
+      COMMON /ALBE/ FO(NB,0:nl),FCLD(NB,0:nl),FI(NB,0:nl),ZEN(NB),
+     1              CZEN(NB),ALBL(NB,0:nl),ALICE,ALOC,ALC0,ALC1,
+     2              ALCR(NB,0:nl),ALCY(NB,0:nl),alb_surf(nb,0:nl),
+     3              FSNW(NB,0:nl),ALSNW,TSUP_ICE,TINF_ICE,TSUP_SNW,
+     4              TINF_SNW
+      double precision FO,FCLD,FI,ZEN,CZEN,ALBL,
+     1    ALICE,ALOC,ALC0,ALC1,ALCR,ALCY,alb_surf,FSNW,ALSNW,TSUP_ICE,
+     2    TINF_ICE,TSUP_SNW,TINF_SNW 
+      COMMON /RANS/ CPDRY,CPH2O,RDRY,FMER(0:NB),FMSEN(0:NB),FMLAT(0:NB),
+     1              FMOC(0:NB),FZON(NB,0:nl),FZSEN(0:nl),FZLAT(0:nl),
+     1              RML,RSOIL 
+      double precision CPDRY,CPH2O,RDRY,FMER,FMSEN,FMLAT,FMOC,FZON,
+     1                 FZSEN,FZLAT,RML,RSOIL
+      COMMON /ARELAT/ AREA_LAND(NB),AREA_SHELF(NB) 
+      double precision AREA_LAND,AREA_SHELF      
+      common /CO2/ pco2
+      double precision pco2
+      double precision CPWAT,CPSOIL,HML,HSOIL
+      double precision phi_r(NB)
+      COMMON /REGIONS/ namezone(0:nl)
+      character*10 namezone
+            
+      character*20 name
+      double precision XL1,XL2,temobs,ALB_land,ELV_land,f_ocean,f_cloud
+     &                ,SURFGL
+      integer iday,iday1,iday2,m,i,j
+
+      data mlength /56,56,56,56,56,56,56,56,56,56,56,52/				Updated!
+
+      do iday = 1, nday
+         imonth(iday) = 1
+      end do
+      iday1 = 1
+      iday2 = mlength(1)
+      do m = 2, nm
+         iday1 = iday1 + mlength(m-1)
+         iday2 = iday2 + mlength(m)
+         do iday = iday1, iday2
+            imonth(iday) = m
+         end do
+      end do
+
+      do m= 0, nm
+       nummth(m)=0
+       temgl_m(m)=0.
+       albgl_m(m)=0.
+       albsgl_m(m)=0.
+       fmer_m(0,m)=0.
+       fmsen_m(0,m)=0.
+       fmlat_m(0,m)=0.
+       fmoc_m(0,m)=0.
+       do i = 1, nb
+        fmer_m(i,m)=0.
+        fmsen_m(i,m)=0.
+        fmlat_m(i,m)=0.
+        fmoc_m(i,m)=0.
+        do j = 1, nl
+         temp_m(i,j,m)=0.
+         ptem_m(i,j,m)=0.
+	 sol_m(i,j,m)=0.
+	 alb_m(i,j,m)=0.
+	 fir_m(i,j,m)=0.
+	 dfmer_m(i,j,m)=0.
+	 fi_m(i,j,m)=0.
+	 fsnw_m(i,j,m)=0.
+	 fnet_m(i,j,m)=0.
+        end do
+       end do
+      end do 
+
+      PI=3.1415926535
+  
+c      CPDRY=1005.
+c      CPH2O=4218.
+c      RML=2.1D+8
+c      GRAV=9.806
+c      REARTH=6.37D+6
+c      SEARTH=4.*PI*REARTH*REARTH      
+
+c      PRE=1.013E+5
+c      SMA=1.
+
+c      ALICE = 0.60
+
+
+      DO I=1,NB
+       PHI(I)=-85.+FLOAT(I-1)*10.
+       XLAT(I)=SIN(PHI(I)*PI/180.)
+      END DO
+
+
+      XL1=-1.
+      PHI1(1)=-90.
+      SURFGL=0.
+      DO I=1,NB-1
+       PHI2(I)=(PHI(I)+PHI(I+1))/2.
+       XL2=SIN(PHI2(I)*PI/180.)
+       SURF(I,0)=(XL2-XL1)/2.
+       XL1=XL2
+       PHI1(I+1)=PHI2(I)
+       SURFGL=SURFGL+SURF(I,0)
+      END DO
+      XL2=1.
+      SURF(NB,0)=(XL2-XL1)/2.
+      PHI2(NB)=90.
+      SURFGL=SURFGL+SURF(NB,0)
+
+
+      DO I=1,NB
+       SURF(I,0)=SURF(I,0)/SURFGL
+      END DO
+      
+            
+      open(20,file='./EBM_sel_alln.dat')
+
+      namezone(0)='ZONAL MEAN'
+      namezone(1)='OCEAN     '
+      namezone(2)='LAND      '      
+      
+      
+      READ(20,*) name, pco2
+      write(*,*) name, pco2
+         
+      READ(20,*) name, xlum
+      write(*,*) name, xlum
+      
+      READ(20,*) name, EXC
+      write(*,*) name, EXC
+      
+      READ(20,*) name, OBL
+      write(*,*) name, OBL
+      
+      READ(20,*) name, XLSPER
+      write(*,*) name, XLSPER
+      
+      READ(20,*) name, REARTH
+      write(*,*) name, REARTH
+      
+      READ(20,*) name, SMA
+      write(*,*) name, SMA          
+      
+      READ(20,*) name, CPDRY
+      write(*,*) name, CPDRY
+      
+      READ(20,*) name, CPH2O
+      write(*,*) name, CPH2O
+      
+      READ(20,*) name, CPWAT
+      write(*,*) name, CPWAT
+      
+      READ(20,*) name, CPSOIL
+      write(*,*) name, CPSOIL
+      
+      READ(20,*) name, HML
+      write(*,*) name, HML
+      
+      READ(20,*) name, HSOIL
+      write(*,*) name, HSOIL
+      
+      READ(20,*) name, PRE
+      write(*,*) name, PRE
+
+      READ(20,*) name, GAMA
+      write(*,*) name, GAMA
+
+      READ(20,*) name, RDRY
+      write(*,*) name, RDRY
+      
+      READ(20,*) name, GRAV
+      write(*,*) name, GRAV      
+
+      READ(20,*) name, ALICE
+      write(*,*) name, ALICE
+      
+      READ(20,*) name, TSUP_ICE
+      write(*,*) name, TSUP_ICE
+
+      READ(20,*) name, TINF_ICE
+      write(*,*) name, TINF_ICE
+                  
+      READ(20,*) name, ALSNW
+      write(*,*) name, ALSNW               
+      
+      READ(20,*) name, TSUP_SNW
+      write(*,*) name, TSUP_SNW
+
+      READ(20,*) name, TINF_SNW
+      write(*,*) name, TINF_SNW
+      
+      READ(20,*) name, ALC0
+      write(*,*) name, ALC0
+      
+      READ(20,*) name, ALC1
+      write(*,*) name, ALC1  
+      
+      READ(20,*) name, ALOC
+      write(*,*) name, ALOC
+      
+      READ(20,*) name, A1
+      write(*,*) name, A1
+      
+      READ(20,*) name, A2
+      write(*,*) name, A2  
+      
+      READ(20,*) name, B1
+      write(*,*) name, B1
+      
+      READ(20,*) name, B2
+      write(*,*) name, B2  
+
+      READ(20,*) name, CC0
+      write(*,*) name, CC0                      
+
+      READ(20,*) name, DD0
+      write(*,*) name, DD0               
+                                    
+      READ(20,*) name
+      write(*,*) name
+      DO I=1,nb
+       READ(20,*) phi_r(I),temobs,ALB_land,f_ocean
+     &           ,f_cloud,DIFS(I),DIFL(I),DIFO(I),DIFZ(I),ELV_land
+       if (dabs(phi_r(i)-phi(i)).gt.1.D-2) then
+         write(*,*)'Latitude bands not correctly defined'
+         write(*,*)'Not 10 deg latitude bands in EBM_sel_all.dat file'
+         write(*,*)'Should be -85 -75 ... 75 85'
+         write(*,*)'Program STOP'
+         STOP
+       endif
+       IF(f_ocean.LT.0.)f_ocean=0.
+       IF(f_ocean.GT.1.)f_ocean=1.
+       fo(i,1)=1.
+       fo(i,2)=0.
+       SURF(i,1)=SURF(I,0)*f_ocean
+       SURF(i,2)=SURF(I,0)*(1.-f_ocean)
+       do j = 1,nl
+        elevl(i,j)=elv_land
+        temp(i,j)=temobs
+        ALBL(i,j)=alb_land
+        FCLD(i,j)=f_cloud
+c        FO(I,j)=f_ocean
+c        SURF(i,j)=SURF(I,0)/float(nl)
+       end do
+      END DO
+
+
+      CLOSE(20)       
+
+      
+c      A1 = 243.39
+c      A2 = -4.48
+c      B1 = 2.07
+cc      B1 = 1.03
+c      B2 = -0.0514
+cc      B2 = -0.2
+c      CC0 = 54.13
+c      DD0 = 0.58
+c      CHEAT = 4.D+8
+cc      cheat = 8.d+9 autres simul
+
+      
+
+      ITER=60
+      SUNEA=1367./(SMA*SMA)
+
+      SEARTH = 4.*PI*REARTH*REARTH
+      RML = HML*CPWAT*1000.
+      IF (RML .LT. 1.0d-5) RML = 1.0d-5    					!Update
+      RSOIL = HSOIL*CPSOIL*1800.
+
+      DO I=1,NB
+       AREA_LAND(I)=0.
+       DO J=1,nl
+        AREA_LAND(I)=AREA_LAND(I)+(1.-FO(I,J))*SURF(I,J)*SEARTH/1.D+12 
+        CHEAT(I,J) = FO(I,J)*RML+(1.-FO(I,J))*RSOIL
+       end do
+      END DO
+      
+      DO I=1,NB
+       fo(i,0)=0.
+       temp(i,0)=0.
+       cheat(i,0)=0.
+       elevl(i,0)=0.
+       albl(i,0)=0.
+       fcld(i,0)=0.
+       do j = 1,nl
+        fo(i,0)=fo(i,0)+fo(i,j)*SURF(i,j)/SURF(i,0)
+        temp(i,0)=temp(i,0)+temp(i,j)*SURF(i,j)/SURF(i,0)
+        cheat(i,0)=cheat(i,0)+cheat(i,j)*SURF(i,j)/SURF(i,0)
+        elevl(i,0)=elevl(i,0)+elevl(i,j)*SURF(i,j)/SURF(i,0)
+        albl(i,0)=albl(i,0)+albl(i,j)*SURF(i,j)/SURF(i,0)
+        fcld(i,0)=fcld(i,0)+fcld(i,j)*SURF(i,j)/SURF(i,0)
+       end do
+       write(*,*)'Latitude: ',phi(i)
+       do j = 0, nl
+        write(*,*)' ',surf(i,j),fo(i,j),temp(I,j),cheat(i,j),elevl(i,j)
+       end do
+      END DO
+ 
+      RETURN
+      END
+
+
+c     -----------------------
+      SUBROUTINE INIT_EBM(Y)
+C     -----------------------
+      implicit none
+      integer nb,nl,neq
+      PARAMETER (nb=18,nl=2,neq=nb*nl)
+
+      COMMON /CLIM/ temp(NB,0:nl),SOL(NB,0:nl),ALB(NB,0:nl),FIR(NB,0:nl)
+     1             ,DFMER(NB,0:nl),PHI(NB),XLAT(NB),A1,A2,B1,B2
+     2             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES(NB,0:nl)
+     3             ,PHI1(NB),PHI2(NB),CC0,DD0,ELEVL(NB,0:nl)
+     4             ,ELEV(NB,0:nl),PTEM(NB,0:nl),PS(NB,0:nl),XL(NB,0:nl)
+     5             ,DFZON(NB,0:nl),DIST(NB,0:nl),SURF(NB,0:nl),GAMA
+      double precision temp,SOL,ALB,FIR,DFMER,PHI,XLAT,A1,A2,B1,B2
+     1             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES
+     2             ,PHI1,PHI2,CC0,DD0,ELEVL,ELEV,PTEM,PS,XL
+     3             ,DFZON,DIST,SURF,GAMA            
+      COMMON /ORBIT/ EXC,OBL,SMA,SUNEA,XLSPER
+      double precision EXC,OBL,SMA,SUNEA,XLSPER
+      common /CO2/ pco2
+      double precision pco2
+      DOUBLE PRECISION Y(NEQ)  
+      integer i,j,ieq  
+
+      DO I=1,NB
+       DO j=1,nl
+        ieq=(i-1)*nl+j
+        y(ieq)=temp(i,j)
+       end do
+      END DO
+
+      RETURN
+      END      
+
+
+
+c     ----------------------------------------
+      SUBROUTINE SOLDAY(XLAT,DN,SOLD,ZEN,CZEN)
+C     ----------------------------------------
+      implicit none
+      integer nday,nb,nl
+      PARAMETER (nday=668,NB=18,nl=2)
+      COMMON /GEN/ PI,CHEAT(NB,0:nl),GRAV,REARTH,SEARTH,ITER
+      double precision PI,CHEAT,GRAV,REARTH,SEARTH
+      integer ITER
+      COMMON /ORBIT/ EXC,OBL,SMA,SUNEA,XLSPER
+      double precision EXC,OBL,SMA,SUNEA,XLSPER
+      COMMON /FUN/ SDEL,CDEL,SPHI,CPHI,CH0,H0   
+      double precision SDEL,CDEL,SPHI,CPHI,CH0,H0
+      double precision SOLD(NB),XLAT(NB)
+      double precision ZEN(NB),CZEN(NB)
+      double precision DN
+      integer i
+      double precision obl_rad,xlsper_rad,slg,th,sth,xls,theta,
+     &                 rm,cte,cz0
+       
+      obl_rad = obl*pi/180.d+0
+      xlsper_rad = xlsper*pi/180.d+0
+             
+      do i = 1, NB
+c=======================================================================
+c   calculates necessary angles:
+c   sdel  = sinus of solar declination;
+c   h0    = solar hour angle at sunset
+c=======================================================================
+    
+         slg   = (2. * pi / float(nday)) * (dn - 79.092)
+         if(slg .lt. 0.) slg = 2. * pi + slg
+         th    = slg - xlsper_rad
+         sth   = dsin(th)
+         xls   = slg + 2.*sth*exc + 2.5*sth*dcos(th)*exc*exc
+     &        + (3.*sth - 13.*sth*sth*sth/3.) *exc*exc*exc
+         theta = xls - xlsper_rad
+         rm    = (1. - exc*exc) / (1. + exc*dcos(theta))
+         sdel  = dsin(obl_rad) * dsin(xls)
+	 
+         cdel  = dsqrt(1.-sdel*sdel)
+         cte   = sunea / rm * rm
+
+         SPHI=XLAT(I)
+         CPHI=DSQRT(1.-SPHI*SPHI)
+
+         if(cphi .le. 1.d-20) cphi = 1.d-20
+
+         ch0   = -sphi * sdel / (cphi * cdel)
+         if(ch0 .ge. 1.) then
+               h0 = 0.
+          else
+               if(ch0 .le. -1) then
+                  h0 = pi
+               else
+                  h0 = acos(ch0)
+               endif
+         endif
+	
+
+c=======================================================================
+c   calculates  the mean cosine of the solar zenith angle.
+c=======================================================================
+     
+          cz0 = (h0 * sphi * sdel + cphi * cdel * dsin(h0)) / pi      
+          CZEN(I) = cz0
+	  ZEN(I) = ACOS(CZEN(I))
+	  sold(i) = cte*cz0
+      end do
+      
+      return
+      end      
+
+      
+c     -----------------      
+      SUBROUTINE DFLMER
+C     -----------------
+
+      implicit none
+      integer nb,nl
+      PARAMETER (NB=18,nl=2)
+
+      COMMON /GEN/ PI,CHEAT(NB,0:nl),GRAV,REARTH,SEARTH,ITER
+      double precision PI,CHEAT,GRAV,REARTH,SEARTH
+      integer ITER
+      COMMON /DIFU/ DIFS(0:NB),DIFL(0:NB),DIFO(0:NB),DIFZ(0:NB)
+      double precision DIFS,DIFL,DIFO,DIFZ
+      COMMON /CLIM/ temp(NB,0:nl),SOL(NB,0:nl),ALB(NB,0:nl),FIR(NB,0:nl)
+     1             ,DFMER(NB,0:nl),PHI(NB),XLAT(NB),A1,A2,B1,B2
+     2             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES(NB,0:nl)
+     3             ,PHI1(NB),PHI2(NB),CC0,DD0,ELEVL(NB,0:nl)
+     4             ,ELEV(NB,0:nl),PTEM(NB,0:nl),PS(NB,0:nl),XL(NB,0:nl)
+     5             ,DFZON(NB,0:nl),DIST(NB,0:nl),SURF(NB,0:nl),GAMA
+      double precision temp,SOL,ALB,FIR,DFMER,PHI,XLAT,A1,A2,B1,B2
+     1             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES
+     2             ,PHI1,PHI2,CC0,DD0,ELEVL,ELEV,PTEM,PS,XL
+     3             ,DFZON,DIST,SURF,GAMA
+      COMMON /ALBE/ FO(NB,0:nl),FCLD(NB,0:nl),FI(NB,0:nl),ZEN(NB),
+     1              CZEN(NB),ALBL(NB,0:nl),ALICE,ALOC,ALC0,ALC1,
+     2              ALCR(NB,0:nl),ALCY(NB,0:nl),alb_surf(nb,0:nl),
+     3              FSNW(NB,0:nl),ALSNW,TSUP_ICE,TINF_ICE,TSUP_SNW,
+     4              TINF_SNW
+      double precision FO,FCLD,FI,ZEN,CZEN,ALBL,
+     1    ALICE,ALOC,ALC0,ALC1,ALCR,ALCY,alb_surf,FSNW,ALSNW,TSUP_ICE,
+     2    TINF_ICE,TSUP_SNW,TINF_SNW 
+      COMMON /RANS/ CPDRY,CPH2O,RDRY,FMER(0:NB),FMSEN(0:NB),FMLAT(0:NB),
+     1              FMOC(0:NB),FZON(NB,0:nl),FZSEN(0:nl),FZLAT(0:nl),
+     1              RML,RSOIL
+      double precision CPDRY,CPH2O,RDRY,FMER,FMSEN,FMLAT,FMOC,FZON,
+     1                 FZSEN,FZLAT,RML,RSOIL
+      COMMON /ORBIT/ EXC,OBL,SMA,SUNEA,XLSPER
+      double precision EXC,OBL,SMA,SUNEA,XLSPER
+
+      integer i,j
+      double precision HSEN(NB),HLAT(NB),HOC(NB),XL1,XL2,FACGEO,DXL2,
+     &                 FAC2,SF2,SF1,FOM
+
+      DO I=1,NB
+c       HSEN(I)=(PRE*CPDRY/GRAV+1.06*ES(I,0)*(CPH2O-CPDRY))*temp(I,0)
+c   PRE*CPDRY*TEMP/GRAV = sensible heat storage in atmospheric column (J m-2)
+       HSEN(I)=(PRE*CPDRY/GRAV+1.06*ES(I,0)*(CPH2O-CPDRY))
+     &      *ptem(I,0)
+       HLAT(I)=XL(I,0)*1.06*ES(I,0)
+       HOC(I)=RML*temp(I,0)
+      END DO
+      FMSEN(0)=0.
+      FMLAT(0)=0.
+      FMOC(0)=0.
+      FMER(0)=0.
+      XL1=-1.
+      FACGEO=2.*PI*REARTH*REARTH
+      DO I=1,NB-1
+       XL2=SIN(PHI2(I)*PI/180.)
+       DXL2=XLAT(I+1)-XLAT(I)
+       FAC2=2.*PI*(1.-XL2*XL2)
+       SF2=XLAT(I+1)-XL2
+       SF1=XL2-XLAT(I)
+       FOM=(FO(I,0)*SF1+FO(I+1,0)*SF2)/(SF1+SF2)
+       FMSEN(I)=FAC2*DIFS(I)*(HSEN(I+1)-HSEN(I))/DXL2
+       FMLAT(I)=FAC2*DIFL(I)*(HLAT(I+1)-HLAT(I))/DXL2
+       if(fi(i,0).gt.0.)then
+         fmoc(i)=(FAC2*FOM*DIFO(I)*(HOC(I+1)-HOC(I))/DXL2)*(1-fi(i,0))
+       else
+         FMOC(I)=FAC2*FOM*DIFO(I)*(HOC(I+1)-HOC(I))/DXL2
+       endif 
+       FMER(I)=FMSEN(I)+FMLAT(I)+FMOC(I)
+       DFMER(I,0)=(FMER(I)-FMER(I-1))/((XL2-XL1)*FACGEO)
+       XL1=XL2
+      END DO
+      FMSEN(NB)=0.
+      FMLAT(NB)=0.
+      FMOC(NB)=0.
+      FMER(NB)=0.
+      DFMER(NB,0)=-FMER(NB-1)/((1.-XL1)*FACGEO)
+
+      DO I=1,NB
+       DO J=1,nl
+        DFMER(I,J)=DFMER(I,0)
+       END DO
+      END DO
+
+      RETURN
+      END
+
+c     -----------------      
+      SUBROUTINE DFLZON
+C     -----------------
+
+      implicit none
+      integer nb,nl
+      PARAMETER (NB=18,nl=2)
+
+      COMMON /GEN/ PI,CHEAT(NB,0:nl),GRAV,REARTH,SEARTH,ITER
+      double precision PI,CHEAT,GRAV,REARTH,SEARTH
+      integer ITER
+      COMMON /DIFU/ DIFS(0:NB),DIFL(0:NB),DIFO(0:NB),DIFZ(0:NB)
+      double precision DIFS,DIFL,DIFO,DIFZ
+      COMMON /CLIM/ temp(NB,0:nl),SOL(NB,0:nl),ALB(NB,0:nl),FIR(NB,0:nl)
+     1             ,DFMER(NB,0:nl),PHI(NB),XLAT(NB),A1,A2,B1,B2
+     2             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES(NB,0:nl)
+     3             ,PHI1(NB),PHI2(NB),CC0,DD0,ELEVL(NB,0:nl)
+     4             ,ELEV(NB,0:nl),PTEM(NB,0:nl),PS(NB,0:nl),XL(NB,0:nl)
+     5             ,DFZON(NB,0:nl),DIST(NB,0:nl),SURF(NB,0:nl),GAMA
+      double precision temp,SOL,ALB,FIR,DFMER,PHI,XLAT,A1,A2,B1,B2
+     1             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES
+     2             ,PHI1,PHI2,CC0,DD0,ELEVL,ELEV,PTEM,PS,XL
+     3             ,DFZON,DIST,SURF,GAMA
+      COMMON /ALBE/ FO(NB,0:nl),FCLD(NB,0:nl),FI(NB,0:nl),ZEN(NB),
+     1              CZEN(NB),ALBL(NB,0:nl),ALICE,ALOC,ALC0,ALC1,
+     2              ALCR(NB,0:nl),ALCY(NB,0:nl),alb_surf(nb,0:nl),
+     3              FSNW(NB,0:nl),ALSNW,TSUP_ICE,TINF_ICE,TSUP_SNW,
+     4              TINF_SNW
+      double precision FO,FCLD,FI,ZEN,CZEN,ALBL,
+     1    ALICE,ALOC,ALC0,ALC1,ALCR,ALCY,alb_surf,FSNW,ALSNW,TSUP_ICE,
+     2    TINF_ICE,TSUP_SNW,TINF_SNW 
+      COMMON /RANS/ CPDRY,CPH2O,RDRY,FMER(0:NB),FMSEN(0:NB),FMLAT(0:NB),
+     1              FMOC(0:NB),FZON(NB,0:nl),FZSEN(0:nl),FZLAT(0:nl),
+     1              RML,RSOIL
+      double precision CPDRY,CPH2O,RDRY,FMER,FMSEN,FMLAT,FMOC,FZON,
+     1                 FZSEN,FZLAT,RML,RSOIL
+      COMMON /ORBIT/ EXC,OBL,SMA,SUNEA,XLSPER
+      double precision EXC,OBL,SMA,SUNEA,XLSPER
+
+      integer i,j,jn
+      double precision HZSEN(nl),HZLAT(nl),PARLGT,FACGEO,DIST1
+
+c zonal diffusion coefficient (m2 s-1)
+c      DIFZ(*) = 8.e+4 * 100.
+
+      DO I=1,NB
+
+       do j = 1, nl
+       HZSEN(j)=(PRE*CPDRY/GRAV+1.06*ES(I,j)*(CPH2O-CPDRY))*ptem(I,j)
+       HZLAT(j)=XL(I,j)*1.06*ES(I,j)
+       end do
+      
+       PARLGT=2.*PI*REARTH*DCOS(PHI(I)*PI/180.)
+       DO j=1,nl
+        if (j.eq.nl) then 
+          jn=1
+        else
+          jn=j+1
+        endif
+        if ((surf(i,j).ge.1.d-10).and.(surf(i,jn).ge.1.d-10)) then       
+         DIST(i,j)=0.5*(SURF(I,J)+SURF(I,JN))*PARLGT/SURF(I,0)
+         FZSEN(j)=-DIFZ(i)*(HZSEN(JN)-HZSEN(J))/DIST(i,j)
+         FZLAT(j)=-DIFZ(i)*(HZLAT(JN)-HZLAT(J))/DIST(i,j)
+         FZON(I,j)=FZSEN(J)+FZLAT(J)
+        else
+         DIST(I,J)=0.
+         FZSEN(J)=0.
+         FZLAT(J)=0.
+         FZON(I,j)=0.
+        endif
+       END DO
+       FZSEN(0)=FZSEN(NL)
+       FZLAT(0)=FZLAT(NL)
+       FZON(I,0)=FZON(I,NL)
+
+       DO j = 1, nl
+        DIST1=SURF(I,J)*PARLGT/SURF(I,0)
+        if (surf(i,j).ge.1.d-10) then
+          DFZON(I,J)=-(FZON(I,j)-FZON(I,j-1))/DIST1
+        else
+          DFZON(I,J)=0.
+        endif
+       END DO
+
+       DFZON(I,0)=0.
+       DO J=1,nl
+         DFZON(I,0)=DFZON(I,0)+DFZON(I,J)*SURF(I,J)/SURF(I,0)
+       END DO
+
+      END DO
+
+      RETURN
+      END
+
+c     -----------------------
+      SUBROUTINE ALBEDO_BUD
+C     -----------------------
+
+      implicit none
+      integer nb,nl
+      PARAMETER (NB=18,nl=2)
+
+      COMMON /CLIM/ temp(NB,0:nl),SOL(NB,0:nl),ALB(NB,0:nl),FIR(NB,0:nl)
+     1             ,DFMER(NB,0:nl),PHI(NB),XLAT(NB),A1,A2,B1,B2
+     2             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES(NB,0:nl)
+     3             ,PHI1(NB),PHI2(NB),CC0,DD0,ELEVL(NB,0:nl)
+     4             ,ELEV(NB,0:nl),PTEM(NB,0:nl),PS(NB,0:nl),XL(NB,0:nl)
+     5             ,DFZON(NB,0:nl),DIST(NB,0:nl),SURF(NB,0:nl),GAMA
+      double precision temp,SOL,ALB,FIR,DFMER,PHI,XLAT,A1,A2,B1,B2
+     1             ,XLUM,TEMGL,ALBGL,SOLGL,ALBSGL,PRE,ES
+     2             ,PHI1,PHI2,CC0,DD0,ELEVL,ELEV,PTEM,PS,XL
+     3             ,DFZON,DIST,SURF,GAMA
+      COMMON /GEN/ PI,CHEAT(NB,0:nl),GRAV,REARTH,SEARTH,ITER
+      double precision PI,CHEAT,GRAV,REARTH,SEARTH
+      integer ITER
+      COMMON /DIFU/ DIFS(0:NB),DIFL(0:NB),DIFO(0:NB),DIFZ(0:NB)
+      double precision DIFS,DIFL,DIFO,DIFZ
+      COMMON /ALBE/ FO(NB,0:nl),FCLD(NB,0:nl),FI(NB,0:nl),ZEN(NB),
+     1              CZEN(NB),ALBL(NB,0:nl),ALICE,ALOC,ALC0,ALC1,
+     2              ALCR(NB,0:nl),ALCY(NB,0:nl),alb_surf(nb,0:nl),
+     3              FSNW(NB,0:nl),ALSNW,TSUP_ICE,TINF_ICE,TSUP_SNW,
+     4              TINF_SNW
+      double precision FO,FCLD,FI,ZEN,CZEN,ALBL,
+     1    ALICE,ALOC,ALC0,ALC1,ALCR,ALCY,alb_surf,FSNW,ALSNW,TSUP_ICE,
+     2    TINF_ICE,TSUP_SNW,TINF_SNW 
+      COMMON /ORBIT/ EXC,OBL,SMA,SUNEA,XLSPER
+      double precision EXC,OBL,SMA,SUNEA,XLSPER
+
+      integer i,j
+      double precision alb_cloud,alb_atm,alb_ocean
+
+
+      alb_cloud = ALC0   ! 0.44
+      alb_atm = ALC1     ! 0.04
+      alb_ocean = ALOC   ! 0.065
+c      write(*,*) 'tsup_ice: ', tsup_ice
+c      write(*,*) 'tinf_ice: ', tinf_ice
+c      write(*,*) 'tsup_snw: ', tsup_snw
+c      write(*,*) 'tinf_snw: ', tinf_snw
+            
+      do i = 1, nb
+       do j = 1, nl
+	! Considering the moisture parameter to be zero for dry conditions (Mars). 		!Updated      	
+	XL(i,j)=0.
+       	ES(i,j)=0.  
+        IF(temp(i,j).GT.TSUP_ICE)THEN
+           FI(i,j)=0.
+         ELSEIF(temp(i,j).GT.TINF_ICE)THEN
+           FI(i,j)=(TSUP_ICE-temp(i,j))/(TSUP_ICE-TINF_ICE)
+         ELSE
+           FI(i,j)=1.
+        ENDIF
+        IF(temp(i,j).GE.TSUP_SNW)THEN
+          FSNW(i,j) = 0.
+        ELSEIF(temp(i,j).gt.TINF_SNW)THEN
+	  FSNW(i,j) = (TSUP_SNW-temp(i,j))/(TSUP_SNW-TINF_SNW)
+        ELSE
+          FSNW(i,j) = 1.
+        ENDIF
+        ALCY(i,j) =(alb_atm/2.)+((1.-(alb_atm/2.))**2.)*alb_cloud
+        alb_surf(i,j) = (1.-fo(i,j))*(1.-fsnw(i,j))*ALBL(i,j)      
+     &             + (1.-fo(i,j))*fsnw(i,j)*alsnw
+     &             + fo(i,j)*(1.-fi(i,j))*alb_ocean      
+     &             + fo(i,j)*fi(i,j)*alice 
+        ALCR(i,j) = alb_atm+((1-alb_atm)**2.)*alb_surf(i,j)
+        ALB(i,j)=FCLD(i,j)*ALCY(i,j)+(1.-FCLD(i,j))*ALCR(i,j)
+       end do
+
+       xl(i,0)=0.
+       es(i,0)=0.
+       fi(i,0)=0.
+       fsnw(i,0)=0.
+       alcy(i,0)=0.
+       alb_surf(i,0)=0.
+       alcr(i,0)=0.
+       alb(i,0)=0.
+       do j = 1, nl
+        xl(i,0) = xl(i,0)+xl(i,j)*SURF(i,j)/SURF(i,0)
+        es(i,0) = es(i,0)+es(i,j)*SURF(i,j)/SURF(i,0)
+        if (fo(i,0).gt.1.d-6) then 
+          fi(i,0) = fi(i,0)+fi(i,j)*fo(i,j)*SURF(i,j)
+     &              /(fo(i,0)*SURF(i,0))
+        else
+          fi(i,0)= 0.
+        endif
+        if (fo(i,0).lt.0.999999) then
+          fsnw(i,0) = fsnw(i,0)+fsnw(i,j)*(1-fo(i,j))*SURF(i,j)
+     &              /((1-fo(i,0))*SURF(i,0))
+        else
+          fsnw(i,0) = 0.
+        endif
+        alcy(i,0) = alcy(i,0)+alcy(i,j)*SURF(i,j)/SURF(i,0)
+        alb_surf(i,0) = alb_surf(i,0)+alb_surf(i,j)*SURF(i,j)/SURF(i,0)
+        alcr(i,0) = alcr(i,0)+alcr(i,j)*SURF(i,j)/SURF(i,0)
+        alb(i,0) = alb(i,0)+alb(i,j)*SURF(i,j)/SURF(i,0)
+       end do
+      end do
+      
+c      write(*,*)'temp: ',temp
+c      write(*,*)'fsnw: ',fsnw
+c      write(*,*)'fi: ',fi
+c      write(*,*)'alb: ',alb             
+      
+      RETURN
+      END
+      
+      
+
+
+
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+c
+c  SUBROUTINES OF THE DIFFERENTIAL EQUATION SOLVER: RUNGE-KUTTA 
+c           WITH VARIABLE TIME STEP
+c 
+cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+
+c     ******************************************************************
+      SUBROUTINE ode(tbegin,tend,y,step_prt,step_min,step_max,eps,nyprt)
+c     ******************************************************************
+
+      implicit none
+      integer nb,neq,nl
+      DOUBLE PRECISION ZERO
+      PARAMETER (nb=18,nl=2,neq=nb*nl,ZERO=0.D-40)
+      DOUBLE PRECISION y(neq),drv(neq)
+      DOUBLE PRECISION tbegin,tend,step_prt,step_min,step_max,eps
+      integer nyprt
+      integer NOK,NBAD
+      double precision x1,x2,h1,hprt,hmin,hmax,TIME
+
+      x1 = tbegin
+      call givedrv(tbegin,y,drv)
+      
+      h1 = 0.1
+      hprt = dabs(step_prt)
+
+      call printing(tbegin,y,drv,hprt)
+c      call write_ebm(tbegin)
+      
+      hmin = dabs(step_min)
+
+1     continue
+
+      if (tend.ge.tbegin) then      
+        x2 = x1+hprt
+        if(x2.gt.tend)x2=tend
+        h1 = min(dabs(h1),x2-x1)
+      else
+        x2 = x1-hprt
+        if(x2.lt.tend)x2=tend
+        h1 = -min(dabs(h1),x1-x2)
+      endif
+
+      HMAX = dabs(step_max)
+      call ODEINT(y,drv,X1,X2,EPS,H1,HMIN,HMAX,NOK,NBAD)
+      time = x2
+      call givedrv(time,y,drv)
+      call printing(time,y,drv,h1)
+      if ((tend-time).le.float(nyprt)) call write_ebm(time)
+      x1 = x2
+
+      IF ((time-tend)*(tend-tbegin).LT.ZERO) GOTO 1
+
+      return
+      end
+
+c     ******************************************************************
+      SUBROUTINE ODEINT(YSTART,DYSTART,X1,X2,EPS,H1,HMIN,HMAX,NOK,NBAD)
+c     ******************************************************************
+
+      implicit none
+      integer nb,neq,nl,maxstp
+      double precision TWO,ZERO,TINY
+      PARAMETER (MAXSTP=50000000,nb=18,nl=2,neq=nb*nl					Updated!
+     &          ,TWO=2.0,ZERO=0.D-40,TINY=0.1)
+      !Considering the MAXSTP as per the Martian conditions	
+      COMMON /PATH/ KMAX,KOUNT,DXSAV,XP(200),YP(10,200)
+      integer KMAX,KOUNT
+      double precision DXSAV,XP,YP
+      COMMON /DEBG/ kdebug
+      integer kdebug
+      DOUBLE PRECISION YSTART(neq),DYSTART(neq),YSCAL(neq),Y(neq)
+     &,DYDX(neq)
+
+      integer NOK,NBAD
+      double precision x1,x2,eps,h1,hmin,hmax
+
+      integer i,n_min,NSTP
+      double precision X,H,XSAV,hdid,hnext
+      
+      n_min = 0
+      X=X1
+      H=SIGN(H1,X2-X1)
+      NOK=0
+      NBAD=0
+      KOUNT=0
+      DO I=1,neq
+        Y(I)=YSTART(I)
+        DYDX(I)=DYSTART(I)
+      END DO
+      IF (KMAX .GT. 0) XSAV=X-DXSAV*TWO
+      DO NSTP=1,MAXSTP
+c        write(7,'(20(1x,D16.9))')HDID,X,Y
+        CALL givedrv(X,Y,DYDX)
+	if (kdebug.eq.1) call write_ebm(X)
+        DO I=1,neq
+          YSCAL(I)=DABS(Y(I))+DABS(H*DYDX(I))+TINY
+        END DO
+        IF(KMAX.GT.0)THEN
+          IF(DABS(X-XSAV).GT.DABS(DXSAV)) THEN
+            IF(KOUNT.LT.KMAX-1)THEN
+              KOUNT=KOUNT+1
+              XP(KOUNT)=X
+              DO I=1,neq
+                YP(I,KOUNT)=Y(I)
+              END DO
+              XSAV=X
+            ENDIF
+          ENDIF
+        ENDIF
+        IF((X+H-X2)*(X+H-X1).GT.ZERO) H=X2-X
+        CALL RKQC(Y,DYDX,X,H,EPS,YSCAL,HDID,HNEXT,HMAX)			Updated!
+        IF (DABS (HDID) .LT.1.0d-7) THEN
+            HDID = SIGN(1.0d-7, X2 - X1)
+            HNEXT = SIGN(1.0d-7, X2 - X1)
+        ENDIF
+        IF(HDID.EQ.H)THEN
+          NOK=NOK+1
+        ELSE
+          NBAD=NBAD+1
+        ENDIF
+        IF((X-X2)*(X2-X1).GE.ZERO)THEN
+          DO I=1,neq
+            YSTART(I)=Y(I)
+            DYSTART(I)=DYDX(I)
+          END DO
+          IF(KMAX.NE.0)THEN
+            KOUNT=KOUNT+1
+            XP(KOUNT)=X
+            DO I=1,neq
+              YP(I,KOUNT)=Y(I)
+            END DO
+          ENDIF
+          H1 = HDID
+c	  rewind(7)
+          RETURN
+        ENDIF
+        IF(DABS(HNEXT).LT.HMIN) then
+	 if (n_min.gt.200) then
+           WRITE(7,*) 'Stepsize smaller than minimum'
+           WRITE(7,*) '      Current stepsize: ',HDID
+           WRITE(7,*) '      Next stepsize:    ',HNEXT
+           WRITE(7,*) '      Minimum stepsize: ',HMIN
+           STOP
+	 endif
+	 n_min = n_min+1
+        ENDIF
+        H=HNEXT
+      END DO
+      write(7,*)'Too many steps in ODINT.'
+      STOP
+      RETURN
+      END
+
+c     ******************************************************************
+      SUBROUTINE RKQC(Y,DYDX,X,HTRY,EPS,YSCAL,HDID,HNEXT,HMAX)
+c     ******************************************************************
+
+      implicit none
+      integer nb,neq,nl
+      double precision FCOR,ONE,SAFETY,ERRCON
+      PARAMETER (nb=18,nl=2,neq=nb*nl
+     &          ,FCOR=.0666666667,ONE=1.,SAFETY=0.9,ERRCON=6.E-4)    !ERRCON=6.E-4
+      DOUBLE PRECISION Y(neq),DYDX(neq),YSCAL(neq),YTEMP(neq)
+     &         ,YSAV(neq),DYSAV(neq)
+      COMMON /DEBG/ kdebug
+      integer kdebug
+
+      double precision X,HTRY,EPS,HDID,HNEXT,HMAX
+
+      integer i
+      double precision PGROW,PSHRNK,XSAV,H,ERRMAX,HH
+           
+      PGROW=-0.20
+      PSHRNK=-0.25
+      XSAV=X
+      DO I=1,neq
+        YSAV(I)=Y(I)
+        DYSAV(I)=DYDX(I)
+      END DO
+      H=HTRY
+1     HH=0.5*H
+      CALL RK4(YSAV,DYSAV,XSAV,HH,YTEMP)
+      X=XSAV+HH
+      CALL givedrv(X,YTEMP,DYDX)
+      if (kdebug.eq.1) call write_ebm(X)
+      CALL RK4(YTEMP,DYDX,X,HH,Y)
+      X=XSAV+H
+      IF(X.EQ.XSAV)THEN
+        WRITE(7,*) 'Stepsize not significant in RKQC.'
+        WRITE(7,*)' H=',H
+        WRITE(7,*)' X=',X
+        WRITE(7,*)' XSAV=',XSAV
+        STOP
+      ENDIF
+      CALL RK4(YSAV,DYSAV,XSAV,H,YTEMP)
+      ERRMAX=0.
+      DO I=1,neq
+        YTEMP(I)=Y(I)-YTEMP(I)
+        ERRMAX=MAX(ERRMAX,DABS(YTEMP(I)/YSCAL(I)))
+      END DO
+      ERRMAX=ERRMAX/EPS
+      IF(ERRMAX.GT.ONE) THEN
+c        hanci=H
+        H=SAFETY*H*(ERRMAX**PSHRNK)
+        GOTO 1
+      ELSE
+        HDID=H
+        IF(ERRMAX.GT.ERRCON)THEN
+          HNEXT=SAFETY*H*(ERRMAX**PGROW)
+        ELSE
+          HNEXT=4.*H
+        ENDIF
+        IF (HNEXT.GE.HMAX) HNEXT=HMAX
+      ENDIF
+      DO I=1,neq
+        Y(I)=Y(I)+YTEMP(I)*FCOR
+      END DO
+      RETURN
+      END
+
+
+c     ******************************************************************
+      SUBROUTINE RK4(Y,DYDX,X,H,YOUT)
+c     ******************************************************************
+
+      implicit none
+      integer nb,neq,nl     
+      PARAMETER (nb=18,nl=2,neq=nb*nl)
+      DOUBLE PRECISION Y(neq),DYDX(neq),YOUT(neq),YT(neq),DYT(neq)
+     &,DYM(neq),X,H
+      COMMON /DEBG/ kdebug
+      integer kdebug 
+
+      integer i
+      double precision HH,H6,XH
+     
+      HH=H*0.5
+      H6=H/6.
+      XH=X+HH
+      DO I=1,neq
+        YT(I)=Y(I)+HH*DYDX(I)
+      END DO
+      CALL givedrv(XH,YT,DYT)
+      if (kdebug.eq.1) call write_ebm(XH)
+      DO I=1,neq
+        YT(I)=Y(I)+HH*DYT(I)
+      END DO
+      CALL givedrv(XH,YT,DYM)
+      if (kdebug.eq.1) call write_ebm(XH)
+      DO I=1,neq
+        YT(I)=Y(I)+H*DYM(I)
+        DYM(I)=DYT(I)+DYM(I)
+      END DO
+      CALL givedrv(X+H,YT,DYT)
+      if (kdebug.eq.1) call write_ebm(X+H)
+      DO I=1,neq
+        YOUT(I)=Y(I)+H6*(DYDX(I)+DYT(I)+2.*DYM(I))
+      END DO
+
+      RETURN
+      END
+      
+      
+
+c=======================================================================
+c***********************************************************************
+      subroutine orb_params(i_AD)
+c***********************************************************************
+c=======================================================================
+
+c=======================================================================
+c      Calculate earth's orbital parameters using Dave Threshers
+c      formula which came from Berger, Andre.  1978
+c      "A Simple Algorithm to Compute Long-Term Variations
+c      of Daily Insolation".  Contribution 18, Institute of Astronomy and
+c      Geophysics, Universite Catholique de Louvain, Louvain-la-Neuve,
+c      Belgium.
+
+c      Original Author: Erik Kluzek
+c      Date:            Oct/97
+c=======================================================================
+      IMPLICIT NONE
+      
+c      include './com_18/parameter.common'
+c      include './com_18/cstpi.common'
+c      include './com_18/cte.common'
+c      include './com_18/solpar.common'
+c      include './com_18/parameter_orb.common'
+      double precision pi,exc,obl,xlsper,oblr,xlsperp,lambm0
+      integer ORB_UNDEF_INT,ORB_NOT_YEAR_BASED
+      real ORB_ECCEN_MIN,ORB_ECCEN_MAX,ORB_OBLIQ_MIN,
+     1           ORB_OBLIQ_MAX,ORB_MVELP_MIN,ORB_MVELP_MAX,
+     2           ORB_UNDEF_REAL,ORB_DEFAULT
+      parameter (ORB_ECCEN_MIN=0.0,ORB_ECCEN_MAX=0.1,
+     1           ORB_OBLIQ_MIN=-90.0,ORB_OBLIQ_MAX=90.0,
+     2           ORB_MVELP_MIN=0.0,ORB_MVELP_MAX=360.0,
+     3           ORB_UNDEF_REAL = 1.e36,ORB_DEFAULT=ORB_UNDEF_REAL,
+     4           ORB_UNDEF_INT=2000000000,
+     5           ORB_NOT_YEAR_BASED=ORB_UNDEF_INT)
+
+CC      exc = 0.016715 !ECCEN_EARTH ! Earth's orbital eccentricity
+CC      obl = 23.441 !OBLIQ_EARTH ! Earth's obliquity in degree's
+CC      xlsper = 102.7 !LOPER_EARTH ! Earth's moving vernal equinox longitude
+CC      real :: oblr   ! Earth's obliquity in radians
+CC      real :: lambm0   ! Mean longitude of perihelion at the
+                       ! vernal equinox (radians)
+CC      real :: xlsperp   ! Earth's moving vernal equinox longitude
+                       ! of perihelion plus pi (radians)
+      real :: eccf     ! Earth-sun distance factor ( i.e. (1/r)**2 )
+      integer :: nfixorb = 0 ! 1: fixed orbit parameter
+      integer :: iyrad,i_AD ! Year AD to calculate orbit for
+      logical, parameter :: lg_p = .true.
+                       ! Flag to print-out status information or not.
+                       ! (This turns off ALL status printing including)
+                       ! (error messages.)       
+      
+c     Input Arguments
+c     ---------------
+CC      real :: exc        ! Earth's orbital eccentricity
+CC      real :: obl        ! Earth's obliquity in degree's
+CC      real :: xlsper        ! Earth's moving vernal equinox longitude
+
+c     Output Arguments
+c     ----------------
+CC      real :: oblr  ! Earth's obliquity in radians
+CC      real :: lambm0  ! Mean longitude of perihelion at the
+c                     ! vernal equinox (radians)
+CC      real :: xlsperp  ! Earth's moving vernal equinox longitude
+c                     ! of perihelion plus pi (radians)
+
+c Parameters for calculating earth's orbital characteristics
+c ----------
+      integer, parameter :: poblen = 47  ! number of elements in the series to calc obliquity
+      integer, parameter :: pecclen = 19 ! number of elements in the series to calc eccentricity
+      integer, parameter :: pmvelen = 78 ! number of elements in the series to calc vernal equinox
+      real :: degrad          ! degrees to radians conversion factor
+      real :: obamp(poblen)   ! amplitudes for obliquity cosine series
+      real :: obrate(poblen)  ! rates for obliquity cosine series
+      real :: obphas(poblen)  ! phases for obliquity cosine series
+      real :: ecamp(pecclen)  ! amplitudes for eccentricity/fvelp cosine/sine series
+      real :: ecrate(pecclen) ! rates for eccentricity/fvelp cosine/sine series
+      real :: ecphas(pecclen) ! phases for eccentricity/fvelp cosine/sine series
+      real :: mvamp(pmvelen)  ! amplitudes for mvelp sine series
+      real :: mvrate(pmvelen) ! rates for mvelp sine series
+      real :: mvphas(pmvelen) ! phases for mvelp sine series
+      real :: yb4_1950AD      ! number of years before 1950 AD
+
+      real, parameter :: psecdeg = 1./3600. ! arc seconds to degrees conversion
+
+c  Cosine series data for computation of obliquity:
+c  amplitude (arc seconds), rate (arc seconds/year), phase (degrees).
+
+      data obamp /-2462.2214466D0, -857.3232075D0, -629.3231835D0,      &
+     &             -414.2804924D0, -311.7632587D0,  308.9408604D0,      &
+     &             -162.5533601D0, -116.1077911D0,  101.1189923D0,      &
+     &              -67.6856209D0,   24.9079067D0,   22.5811241D0,      &
+     &              -21.1648355D0,  -15.6549876D0,   15.3936813D0,      &
+     &               14.6660938D0,  -11.7273029D0,   10.2742696D0,      &
+     &                6.4914588D0,    5.8539148D0,   -5.4872205D0,      &
+     &               -5.4290191D0,    5.1609570D0,    5.0786314D0,      &
+     &               -4.0735782D0,    3.7227167D0,    3.3971932D0,      &
+     &               -2.8347004D0,   -2.6550721D0,   -2.5717867D0,      &
+     &               -2.4712188D0,    2.4625410D0,    2.2464112D0,      &
+     &               -2.0755511D0,   -1.9713669D0,   -1.8813061D0,      &
+     &               -1.8468785D0,    1.8186742D0,    1.7601888D0,      &
+     &               -1.5428851D0,    1.4738838D0,   -1.4593669D0,      &
+     &                1.4192259D0,   -1.1818980D0,    1.1756474D0,      &
+     &               -1.1316126D0,    1.0896928D0/
+
+      data obrate /31.609974D0, 32.620504D0, 24.172203D0,               &
+     &             31.983787D0, 44.828336D0, 30.973257D0,               &
+     &             43.668246D0, 32.246691D0, 30.599444D0,               &
+     &             42.681324D0, 43.836462D0, 47.439436D0,               &
+     &             63.219948D0, 64.230478D0,  1.010530D0,               &
+     &              7.437771D0, 55.782177D0,  0.373813D0,               &
+     &             13.218362D0, 62.583231D0, 63.593761D0,               &
+     &             76.438310D0, 45.815258D0,  8.448301D0,               &
+     &             56.792707D0, 49.747842D0, 12.058272D0,               &
+     &             75.278220D0, 65.241008D0, 64.604291D0,               &
+     &              1.647247D0,  7.811584D0, 12.207832D0,               &
+     &             63.856665D0, 56.155990D0, 77.448840D0,               &
+     &              6.801054D0, 62.209418D0, 20.656133D0,               &
+     &             48.344406D0, 55.145460D0, 69.000539D0,               &
+     &             11.071350D0, 74.291298D0, 11.047742D0,               &
+     &              0.636717D0, 12.844549D0/
+
+      data obphas /251.9025D0, 280.8325D0, 128.3057D0,                  &
+     &             292.7252D0,  15.3747D0, 263.7951D0,                  &
+     &             308.4258D0, 240.0099D0, 222.9725D0,                  &
+     &             268.7809D0, 316.7998D0, 319.6024D0,                  &
+     &             143.8050D0, 172.7351D0,  28.9300D0,                  &
+     &             123.5968D0,  20.2082D0,  40.8226D0,                  &
+     &             123.4722D0, 155.6977D0, 184.6277D0,                  &
+     &             267.2772D0,  55.0196D0, 152.5268D0,                  &
+     &              49.1382D0, 204.6609D0,  56.5233D0,                  &
+     &             200.3284D0, 201.6651D0, 213.5577D0,                  &
+     &              17.0374D0, 164.4194D0,  94.5422D0,                  &
+     &             131.9124D0,  61.0309D0, 296.2073D0,                  &
+     &             135.4894D0, 114.8750D0, 247.0691D0,                  &
+     &             256.6114D0,  32.1008D0, 143.6804D0,                  &
+     &              16.8784D0, 160.6835D0,  27.5932D0,                  &
+     &             348.1074D0,  82.6496D0/
+
+c  Cosine/sine series data for computation of eccentricity and
+c  fixed vernal equinox longitude of perihelion (fvelp):
+c  amplitude, rate (arc seconds/year), phase (degrees).
+
+      data ecamp /0.01860798D0,  0.01627522D0, -0.01300660D0,           &
+     &            0.00988829D0, -0.00336700D0,  0.00333077D0,           &
+     &           -0.00235400D0,  0.00140015D0,  0.00100700D0,           &
+     &            0.00085700D0,  0.00064990D0,  0.00059900D0,           &
+     &            0.00037800D0, -0.00033700D0,  0.00027600D0,           &
+     &            0.00018200D0, -0.00017400D0, -0.00012400D0,           &
+     &            0.00001250D0/
+
+      data ecrate /4.2072050D0,  7.3460910D0, 17.8572630D0,             &
+     &            17.2205460D0, 16.8467330D0,  5.1990790D0,             &
+     &            18.2310760D0, 26.2167580D0,  6.3591690D0,             &
+     &            16.2100160D0,  3.0651810D0, 16.5838290D0,             &
+     &            18.4939800D0,  6.1909530D0, 18.8677930D0,             &
+     &            17.4255670D0,  6.1860010D0, 18.4174410D0,             &
+     &             0.6678630D0/
+
+      data ecphas /28.620089D0, 193.788772D0, 308.307024D0,             &
+     &            320.199637D0, 279.376984D0,  87.195000D0,             &
+     &            349.129677D0, 128.443387D0, 154.143880D0,             &
+     &            291.269597D0, 114.860583D0, 332.092251D0,             &
+     &            296.414411D0, 145.769910D0, 337.237063D0,             &
+     &            152.092288D0, 126.839891D0, 210.667199D0,             &
+     &             72.108838D0/
+
+c  Sine series data for computation of moving vernal equinox
+c  longitude of perihelion:
+c  amplitude (arc seconds), rate (arc seconds/year), phase (degrees).
+
+      data mvamp /7391.0225890D0, 2555.1526947D0, 2022.7629188D0,       &
+     &           -1973.6517951D0, 1240.2321818D0,  953.8679112D0,       &
+     &            -931.7537108D0,  872.3795383D0,  606.3544732D0,       &
+     &            -496.0274038D0,  456.9608039D0,  346.9462320D0,       &
+     &            -305.8412902D0,  249.6173246D0, -199.1027200D0,       &
+     &             191.0560889D0, -175.2936572D0,  165.9068833D0,       &
+     &             161.1285917D0,  139.7878093D0, -133.5228399D0,       &
+     &             117.0673811D0,  104.6907281D0,   95.3227476D0,       &
+     &              86.7824524D0,   86.0857729D0,   70.5893698D0,       &
+     &             -69.9719343D0,  -62.5817473D0,   61.5450059D0,       &
+     &             -57.9364011D0,   57.1899832D0,  -57.0236109D0,       &
+     &             -54.2119253D0,   53.2834147D0,   52.1223575D0,       &
+     &             -49.0059908D0,  -48.3118757D0,  -45.4191685D0,       &
+     &             -42.2357920D0,  -34.7971099D0,   34.4623613D0,       &
+     &             -33.8356643D0,   33.6689362D0,  -31.2521586D0,       &
+     &             -30.8798701D0,   28.4640769D0,  -27.1960802D0,       &
+     &              27.0860736D0,  -26.3437456D0,   24.7253740D0,       &
+     &              24.6732126D0,   24.4272733D0,   24.0127327D0,       &
+     &              21.7150294D0,  -21.5375347D0,   18.1148363D0,       &
+     &             -16.9603104D0,  -16.1765215D0,   15.5567653D0,       &
+     &              15.4846529D0,   15.2150632D0,   14.5047426D0,       &
+     &             -14.3873316D0,   13.1351419D0,   12.8776311D0,       &
+     &              11.9867234D0,   11.9385578D0,   11.7030822D0,       &
+     &              11.6018181D0,  -11.2617293D0,  -10.4664199D0,       &
+     &              10.4333970D0,  -10.2377466D0,   10.1934446D0,       &
+     &             -10.1280191D0,   10.0289441D0,  -10.0034259D0/
+
+      data mvrate /31.609974D0, 32.620504D0, 24.172203D0,               &
+     &              0.636717D0, 31.983787D0,  3.138886D0,               &
+     &             30.973257D0, 44.828336D0,  0.991874D0,               &
+     &              0.373813D0, 43.668246D0, 32.246691D0,               &
+     &             30.599444D0,  2.147012D0, 10.511172D0,               &
+     &             42.681324D0, 13.650058D0,  0.986922D0,               &
+     &              9.874455D0, 13.013341D0,  0.262904D0,               &
+     &              0.004952D0,  1.142024D0, 63.219948D0,               &
+     &              0.205021D0,  2.151964D0, 64.230478D0,               &
+     &             43.836462D0, 47.439436D0,  1.384343D0,               &
+     &              7.437771D0, 18.829299D0,  9.500642D0,               &
+     &              0.431696D0,  1.160090D0, 55.782177D0,               &
+     &             12.639528D0,  1.155138D0,  0.168216D0,               &
+     &              1.647247D0, 10.884985D0,  5.610937D0,               &
+     &             12.658184D0,  1.010530D0,  1.983748D0,               &
+     &             14.023871D0,  0.560178D0,  1.273434D0,               &
+     &             12.021467D0, 62.583231D0, 63.593761D0,               &
+     &             76.438310D0,  4.280910D0, 13.218362D0,               &
+     &             17.818769D0,  8.359495D0, 56.792707D0,               &
+     &              8.448301D0,  1.978796D0,  8.863925D0,               &
+     &              0.186365D0,  8.996212D0,  6.771027D0,               &
+     &             45.815258D0, 12.002811D0, 75.278220D0,               &
+     &             65.241008D0, 18.870667D0, 22.009553D0,               &
+     &             64.604291D0, 11.498094D0,  0.578834D0,               &
+     &              9.237738D0, 49.747842D0,  2.147012D0,               &
+     &              1.196895D0,  2.133898D0,  0.173168D0/
+
+      data mvphas /251.9025D0, 280.8325D0, 128.3057D0,                  &
+     &             348.1074D0, 292.7252D0, 165.1686D0,                  &
+     &             263.7951D0,  15.3747D0,  58.5749D0,                  &
+     &              40.8226D0, 308.4258D0, 240.0099D0,                  &
+     &             222.9725D0, 106.5937D0, 114.5182D0,                  &
+     &             268.7809D0, 279.6869D0,  39.6448D0,                  &
+     &             126.4108D0, 291.5795D0, 307.2848D0,                  &
+     &              18.9300D0, 273.7596D0, 143.8050D0,                  &
+     &             191.8927D0, 125.5237D0, 172.7351D0,                  &
+     &             316.7998D0, 319.6024D0,  69.7526D0,                  &
+     &             123.5968D0, 217.6432D0,  85.5882D0,                  &
+     &             156.2147D0,  66.9489D0,  20.2082D0,                  &
+     &             250.7568D0,  48.0188D0,   8.3739D0,                  &
+     &              17.0374D0, 155.3409D0,  94.1709D0,                  &
+     &             221.1120D0,  28.9300D0, 117.1498D0,                  &
+     &             320.5095D0, 262.3602D0, 336.2148D0,                  &
+     &             233.0046D0, 155.6977D0, 184.6277D0,                  &
+     &             267.2772D0,  78.9281D0, 123.4722D0,                  &
+     &             188.7132D0, 180.1364D0,  49.1382D0,                  &
+     &             152.5268D0,  98.2198D0,  97.4808D0,                  &
+     &             221.5376D0, 168.2438D0, 161.1199D0,                  &
+     &              55.0196D0, 262.6495D0, 200.3284D0,                  &
+     &             201.6651D0, 294.6547D0,  99.8233D0,                  &
+     &             213.5577D0, 154.1631D0, 232.7153D0,                  &
+     &             138.3034D0, 204.6609D0, 106.5938D0,                  &
+     &             250.4676D0, 332.3345D0,  27.3039D0/
+
+c     Local variables
+c     ---------------
+      integer i        ! Index for series summations
+      real :: obsum    ! Obliquity series summation
+      real :: cossum   ! Cosine series summation for eccentricity/fvelp
+      real :: sinsum   ! Sine series summation for eccentricity/fvelp
+      real :: fvelp    ! Fixed vernal equinox longitude of perihelion
+      real :: mvsum    ! mvelp series summation
+      real :: beta     ! Intermediate argument for lambm0
+      real :: years    ! Years to time of interest (negative = past;
+c                      ! positive = future)
+      real :: exc2   ! eccentricity squared
+      real :: exc3   ! eccentricity cubed
+CC      real :: pi       ! pi 
+
+c radinp and algorithms below will need a degrees to radians conversion
+c factor.
+
+      pi     =  4.*atan(1.)
+      degrad = pi/180.
+
+c Check for flag to use input orbit parameters
+c        i_AD = myear  !!!!!! REMPLACER PAR nyear2 si Holocene
+c        if(imig.eq.1) i_AD = 1950 - nyear2
+
+      if ( i_AD .eq. ORB_NOT_YEAR_BASED ) then
+
+c Check input obliq, eccen, and mvelp to ensure reasonable
+
+         if( obl .eq. ORB_UNDEF_REAL )then
+          if ( lg_p ) then
+            write(*,*)'(orb_params) Have to specify orbital parameters:'
+            write(*,*) 'Either set: '                                   &
+     &                ,'i_AD, OR [obl, exc, and xlsper]:'
+            write(*,*)'i_AD is the year to simulate the orbit for ' 
+     &                ,'(ie. 1950): '
+            write(*,*)'obl, exc, xlsper specify the orbit directly:'
+            write(*,*)'The AMIP II settings (for a 1995 orbit) are: '
+            write(*,*)' obl = 23.4441'
+            write(*,*)' exc = 0.016715'
+            write(*,*)' xlsper = 102.7'
+          end if
+          stop 999
+         else if ( lg_p ) then
+           write(*,*)'(orb_params) Use input orbital parameters: '
+         end if
+         if( (obl.lt.ORB_OBLIQ_MIN).or.(obl.gt.ORB_OBLIQ_MAX) ) then
+          if ( lg_p ) then
+             write(*,*) '(orb_params): Input obliquity unreasonable: '  &
+     &                  ,obl
+          end if
+          stop 999
+         end if
+         if( (exc.lt.ORB_ECCEN_MIN).or.(exc.gt.ORB_ECCEN_MAX) ) then
+          if ( lg_p ) then
+            write(*,*) '(orb_params): Input eccentricity unreasonable: '&
+     &                 ,exc
+          end if
+          stop 999
+         end if
+         if( (xlsper.lt.ORB_MVELP_MIN).or.
+     &             (xlsper.gt.ORB_MVELP_MAX) ) then
+          if ( lg_p ) then
+         write(*,*)'(orb_params): Input mvelp unreasonable: ',xlsper
+          end if
+          stop 999
+         end if
+        exc2 = exc*exc
+        exc3 = exc2*exc
+      else
+
+c Otherwise calculate based on years before present
+
+        yb4_1950AD = 1950.0 - float(i_AD)
+        if ( abs(yb4_1950AD) .gt. 1000000.0 )then
+          if ( lg_p ) then
+            write(*,*)'(orb_params) orbit only valid for years+-1000000'
+            write(*,*)'(orb_params) Relative to 1950 AD'
+            write(*,*)'(orb_params) # of years before 1950: ',yb4_1950AD
+            write(*,*)'(orb_params) Year to simulate was  : ',i_AD
+          end if
+          stop 999
+        end if
+
+
+c The following calculates the earth's obliquity, orbital eccentricity
+c (and various powers of it) and vernal equinox mean longitude of
+c perihelion for years in the past (future = negative of years past),
+c using constants (see parameter section) given in the program of:
+
+c Berger, Andre.  1978  A Simple Algorithm to Compute Long-Term Variations
+c of Daily Insolation.  Contribution 18, Institute of Astronomy and
+c Geophysics, Universite Catholique de Louvain, Louvain-la-Neuve, Belgium.
+
+c and formulas given in the paper (where less precise constants are also
+c given):
+
+c Berger, Andre.  1978.  Long-Term Variations of Daily Insolation and
+c Quaternary Climatic Changes.  J. of the Atmo. Sci. 35:2362-2367
+
+c The algorithm is valid only to 1,000,000 years past or hence.
+c For a solution valid to 5-10 million years past see the above author.
+c Algorithm below is better for years closer to present than is the
+c 5-10 million year solution.
+
+c Years to time of interest must be negative of years before present
+c (1950) in formulas that follow.
+
+        years = - yb4_1950AD
+
+c In the summations below, cosine or sine arguments, which end up in
+c degrees, must be converted to radians via multiplication by degrad.
+
+c Summation of cosine series for obliquity (epsilon in Berger 1978) in
+c degrees. Convert the amplitudes and rates, which are in arc seconds, into
+c degrees via multiplication by psecdeg (arc seconds to degrees conversion
+c factor).  For obliq, first term is Berger 1978's epsilon star; second
+c term is series summation in degrees.
+c
+        obsum = 0.0
+        do i = 1, poblen
+          obsum = obsum +                                               &
+     &           obamp(i)*psecdeg*cos((obrate(i)*psecdeg*years +        &
+     &                                obphas(i))*degrad)
+        end do
+        obl = 23.320556 + obsum
+
+c Summation of cosine and sine series for computation of eccentricity
+c (eccen; e in Berger 1978) and fixed vernal equinox longitude of perihelion
+c (fvelp; pi in Berger 1978), which is used for computation of moving vernal
+c equinox longitude of perihelion.  Convert the rates, which are in arc
+c seconds, into degrees via multiplication by psecdeg.
+
+        cossum = 0.0
+        do i = 1, pecclen
+          cossum = cossum +                                             &
+     &            ecamp(i)*cos((ecrate(i)*psecdeg*years +               &
+     &                          ecphas(i))*degrad)
+        end do
+
+        sinsum = 0.0
+        do i = 1, pecclen
+          sinsum = sinsum +                                             &
+     &            ecamp(i)*sin((ecrate(i)*psecdeg*years +               &
+     &                          ecphas(i))*degrad)
+        end do
+
+c Use summations to calculate eccentricity
+
+        exc2 = cossum*cossum + sinsum*sinsum
+        exc = sqrt(exc2)
+        exc3 = exc2*exc
+
+c A series of cases for fvelp, which is in radians.
+
+        if (abs(cossum) .le. 1.0E-8) then
+          if (sinsum .eq. 0.0) then
+            fvelp = 0.0
+          else if (sinsum .lt. 0.0) then
+            fvelp = 1.5*pi
+          else if (sinsum .gt. 0.0) then
+            fvelp = .5*pi
+          endif
+        else if (cossum .lt. 0.0) then
+          fvelp = atan(sinsum/cossum) + pi
+        else if (cossum .gt. 0.0) then
+          if (sinsum .lt. 0.0) then
+            fvelp = atan(sinsum/cossum) + 2.0*pi
+          else
+            fvelp = atan(sinsum/cossum)
+          endif
+        endif
+
+c Summation of sine series for computation of moving vernal equinox longitude
+c of perihelion (mvelp; omega bar in Berger 1978) in degrees.  For mvelp,
+c first term is fvelp in degrees; second term is Berger 1978's psi bar times
+c years and in degrees; third term is Berger 1978's zeta; fourth term is
+c series summation in degrees.  Convert the amplitudes and rates, which are
+c in arc seconds, into degrees via multiplication by psecdeg.  Series summation
+c plus second and third terms constitute Berger 1978's psi, which is the
+c general precession.
+
+        mvsum = 0.0
+        do i = 1, pmvelen
+          mvsum = mvsum +                                               &
+     &           mvamp(i)*psecdeg*sin((mvrate(i)*psecdeg*years +        &
+     &                                mvphas(i))*degrad)
+        end do
+        xlsper = fvelp/degrad + 50.439273*psecdeg*years + 3.392506       &
+     &  + mvsum
+
+c Cases to make sure mvelp is between 0 and 360.
+
+        do while (xlsper .lt. 0.0)
+          xlsper = xlsper + 360.0
+        end do
+        do while (xlsper .ge. 360.0)
+          xlsper = xlsper - 360.0
+        end do
+      end if  ! end of test on whether to calculate or use input orbital params
+
+c Orbit needs the obliquity in radians
+
+      oblr = obl*degrad
+
+c 180 degrees must be added to mvelp since observations are made from the
+c earth and the sun is considered (wrongly for the algorithm) to go around
+c the earth. For a more graphic explanation see Appendix B in:
+
+c A. Berger, M. Loutre and C. Tricot. 1993.  Insolation and Earth's Orbital
+c Periods.  J. of Geophysical Research 98:10,341-10,362.
+
+c Additionally, orbit will need this value in radians. So mvelp becomes
+c mvelpp (mvelp plus pi)
+
+      xlsperp = (xlsper + 180.)*degrad
+
+c Set up an argument used several times in lambm0 calculation ahead.
+
+      beta = sqrt(1. - exc2)
+
+c The mean longitude at the vernal equinox (lambda m nought in Berger
+c 1978; in radians) is calculated from the following formula given in
+c Berger 1978.  At the vernal equinox the true longitude (lambda in Berger
+c 1978) is 0.
+
+      lambm0 = 2.*((.5*exc + .125*exc3)*(1. + beta)*sin(xlsperp)     
+     &            - .25*exc2*(.5 + beta)*sin(2.*xlsperp)               
+     &            + .125*exc3*(1./3. + beta)*sin(3.*xlsperp))
+     
+      xlsper= xlsper+180.
+      if (xlsper.ge.360.)xlsper=xlsper-360.
+
+c      if ( lg_p ) then
+c        write(*,*) exc,obl,xlsper
+        write(*,'(/," ****************************************")')
+        write(*,'(" *     Computed Orbital Parameters      *")')
+        write(*,'(" ****************************************")')
+        write(*,'(" * Year AD           = ",i16  ," *")') i_AD
+        write(*,'(" * Eccentricity      = ",f16.6," *")') exc
+        write(*,'(" * Obliquity (deg)   = ",f16.6," *")') obl
+        write(*,'(" * Obliquity (rad)   = ",f16.6," *")') oblr
+        write(*,'(" * Long of perh(deg) = ",f16.6," *")') xlsper
+        write(*,'(" * Long of perh(rad) = ",f16.6," *")') xlsperp
+        write(*,'(" * Long at v.e.(rad) = ",f16.6," *")') lambm0
+        write(*,'(" ****************************************")')
+c      end if
+      
+     
+
+      return
+      end 
+      
+c***********************************************************************      
+      subroutine make_directory(out_dir)
+c***********************************************************************
+      implicit none
+      character*200 out_dir
+      character*250 command 
+ 
+
+
+      command='mkdir -p '//trim(out_dir)
+      call system(command)      
+
+ 
+      return
+      end      
+
+c============================
+
+
+      

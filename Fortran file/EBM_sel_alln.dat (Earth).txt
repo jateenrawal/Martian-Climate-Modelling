@@ -1,0 +1,51 @@
+ PCO2:              425.                  Atmospheric CO2 level (ppmv terrestre ou 1.013e-3 mbar) (1990: 354; 2000: 369; 2024: 422; 2025: 425)
+ XLUM:              1.00                  Relative solar luminosity
+ EXC:               0.016693              Eccentricity (1800: 0.016784; 1990: 0.016708; 2000: 0.016704; 2024: 0.016694; 2025: 0.016693)
+ OBL:               23.436516             Obliquity (deg) (1800: 23.465778; 1990: 23.441069; 2000: 23.4397; 2024: 23.436647; 2025: 23.436516)
+ XLSPER:            283.323792            Longitude of perihelion (deg) (1800: 279.471130; 1990: 282.724182; 2000: 282.895; 2024: 283.306671; 2025: 283.323792)
+ REARTH:            6.37E+6               Planetary radius (m)
+ SMA:               1.00                  Semi-major axis (AU)
+ CPDRY:             1005.                 Cp of dry air (J kg-1 K-1)
+ CPH2O:             1850.                 Cp of water vapour (J kg-1 K-1)
+ CPWAT:             4184.                 Cp of liquid water (J kg-1 K-1)
+ CPSOIL:            1300.                 Cp of soil (J kg-1 K-1)
+ HML:               100.                  Thickness of ocean surface layer (m)
+ HSOIL:             10.                   Thickness of surface soil layer (m)
+ PRE:               1.013E+5              Sea level atmospheric pressure (Pa)
+ GAMA:              0.0065                Mean atmospheric lapse rate (K m-1)
+ RDRY               287.                  Specific gas constant of dry air (J K-1 kg-1)
+ GRAV:              9.806                 Surface gravity (m s-2)
+ ALICE:             0.60                  Albedo of sea ice 
+ TSUP_ICE:          271.25                Upper temperature threshold for sea ice (K)  271.25  273.15
+ TINF_ICE:          259.15                Lower temperature threshold for sea ice (K)  259.15
+ ALSNW:             0.70                  Albedo of snow
+ TSUP_SNW:          273.15                Upper temperature threshold for snow (K)  273.15  276.15
+ TINF_SNW:          265.15                Lower temperature threshold for snow (K)  265.15
+ ALC0:              0.435                 Cloud albedo (0.435)
+ ALC1:              0.030                 Clear sky atmospheric albedo
+ ALOC:              0.080                 Ocean albedo
+ A1:                243.39                Parameters for IR flux calculation (a1)  243.39
+ A2:                -4.48                 Parameters for IR flux calculation (a2)  -4.48                
+ B1:                2.07                  Parameters for IR flux calculation (b1)  2.07
+ B2:                -0.0514               Parameters for IR flux calculation (b2)  -0.0514
+ CC0:               54.13                 Parameters for IR flux calculation (C)   54.13
+ DD0:               0.58                  Parameters for IR flux calculation (D)   0.58
+ LAT   TS_INI ALBL      FOCEAN  FCLOUD  DIFS       DIFL       DIFO      DIFZ       ELEVL
+ -85.  230.8  0.250     0.000   0.470   0.060E+07  0.060E+07  0.100E+05 2.000E+07  2800.
+ -75.  243.6  0.250     0.252   0.586   0.060E+07  0.060E+07  0.100E+05 2.000E+07  2600.
+ -65.  266.3  0.220     0.905   0.746   0.140E+07  0.140E+07  0.200E+05 2.000E+07  1000.
+ -55.  276.0  0.167     0.992   0.767   0.140E+07  0.140E+07  0.200E+05 2.000E+07   263.
+ -45.  283.0  0.182     0.969   0.652   0.140E+07  0.140E+07  0.200E+05 2.000E+07   507.
+ -35.  289.6  0.181     0.886   0.534   0.140E+07  0.140E+07  0.200E+05 2.000E+07   402.
+ -25.  294.5  0.180     0.769   0.475   0.140E+07  0.140E+07  0.200E+05 2.000E+07   646.
+ -15.  297.7  0.160     0.781   0.470   0.140E+07  0.140E+07  0.200E+05 2.000E+07   745.
+  -5.  299.2  0.145     0.765   0.485   0.140E+07  0.140E+07  0.200E+05 2.000E+07   456.
+   5.  299.6  0.145     0.773   0.480   0.140E+07  0.140E+07  0.200E+05 2.000E+07   475.
+  15.  299.2  0.160     0.738   0.440   0.140E+07  0.140E+07  0.200E+05 2.000E+07   456.
+  25.  296.0  0.180     0.625   0.464   0.140E+07  0.140E+07  0.200E+05 2.000E+07   656.
+  35.  289.3  0.180     0.572   0.559   0.140E+07  0.140E+07  0.200E+05 2.000E+07  1337.
+  45.  281.9  0.165     0.476   0.633   0.140E+07  0.140E+07  0.200E+05 2.000E+07   706.
+  55.  275.3  0.155     0.424   0.679   0.140E+07  0.140E+07  0.200E+05 2.000E+07   431.
+  65.  268.0  0.220     0.290   0.676   0.140E+07  0.140E+07  0.200E+05 2.000E+07   424.
+  75.  260.8  0.250     0.701   0.651   0.060E+07  0.060E+07  0.100E+05 2.000E+07   688.
+  85.  256.2  0.250     0.901   0.640   0.060E+07  0.060E+07  0.100E+05 2.000E+07   552.

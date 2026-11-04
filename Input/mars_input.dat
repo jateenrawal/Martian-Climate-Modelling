@@ -1,0 +1,65 @@
+# ---- Orbital / radiative forcing ----
+XLUM:        1.00        # Relative solar luminosity (1.0 = present-day Sun)
+EXC:         0.0934      # Orbital eccentricity (present-day Mars)
+OBL:         25.19       # Obliquity (deg)                (present-day Mars)
+XLSPER:      250.87      # Areocentric longitude of perihelion, Ls (deg)
+SMA:         1.5237      # Semi-major axis (AU)
+S0:          589.0       # Mean solar flux at Mars' semi-major axis (W m-2)
+
+# ---- Planet / atmosphere ----
+RPLANET:     3.3895E+6   # Mean planetary radius (m)
+GRAV:        3.711       # Surface gravity (m s-2)
+PS_MEAN:     610.0       # Mean/reference surface pressure used in the run (Pa)
+PS_REF:      610.0       # Reference pressure for potential temperature (Pa)
+CPDRY:       770.0       # Specific heat of CO2 atmosphere at const. P (J kg-1 K-1)
+RDRY:        189.0       # Specific gas constant of CO2 (J kg-1 K-1)
+GAMA:        0.0025      # Mean atmospheric lapse rate (K m-1)
+DIFS_SCALE:  1.0
+ALFROST:     0.65        # Albedo of bright CO2/H2O frost/ice
+TSUP_FROST:  185.0       # Temperature above which frost fully sublimes (K)
+TINF_FROST:  170.0       # Temperature below which surface is fully frost-covered (K)
+ALC0:        0.40        # Dust/water-ice cloud column albedo
+ALC1:        0.02        # Clear-atmosphere (Rayleigh + aerosol) albedo
+
+A1:          203.3       # OLR at 0 C, at reference pressure PS_REF (W m-2)
+A2:          -10.0       # Sensitivity of A0 to ln(PS_MEAN/PS_REF)
+B1:          2.09        # OLR increase per degree C (W m-2 K-1)
+B2:          0.0         # Sensitivity of B0 to ln(PS_MEAN/PS_REF)
+CC0:         0.0         # Cloud/dust greenhouse offset (W m-2)
+DD0:         0.0         # Cloud/dust greenhouse offset slope (W m-2 K-1)
+
+
+
+
+
+
+# ---- Latitude band table (18 bands, 10 deg wide, -85 to 85) ----
+# TS_INI  : initial-guess surface temperature (K) -- rough, the model
+#           will relax away from this over the first few simulated years
+# ALBEDO  : bare-ground (regolith/dust) albedo
+# FCLOUD  : fractional dust/water-ice cloud cover (0 by default)
+# ELEV    : elevation relative to the reference areoid (m); set to 0
+#           here (flat reference case) -- plug in real MOLA zonal-mean
+#           topography if you want elevation effects on pressure/temperature
+# DIFS    : meridional sensible-heat diffusion coefficient (m2 s-1 equiv.)
+# CHEAT   : effective areal surface heat capacity (J m-2 K-1)
+#
+# PHI    TS_INI  ALBEDO  FCLOUD    ELEV      DIFS      CHEAT
+ -85     150.0   0.32    0.00       0.0   0.6E+06   1.0E+07
+ -75     155.0   0.30    0.00       0.0   0.6E+06   1.0E+07
+ -65     165.0   0.28    0.00       0.0   1.0E+06   1.0E+07
+ -55     180.0   0.26    0.00       0.0   1.4E+06   1.0E+07
+ -45     195.0   0.25    0.00       0.0   1.4E+06   1.0E+07
+ -35     205.0   0.24    0.00       0.0   1.4E+06   1.0E+07
+ -25     212.0   0.23    0.00       0.0   1.4E+06   1.0E+07
+ -15     216.0   0.22    0.00       0.0   1.4E+06   1.0E+07
+  -5     218.0   0.22    0.00       0.0   1.4E+06   1.0E+07
+   5     218.0   0.22    0.00       0.0   1.4E+06   1.0E+07
+  15     216.0   0.22    0.00       0.0   1.4E+06   1.0E+07
+  25     212.0   0.23    0.00       0.0   1.4E+06   1.0E+07
+  35     205.0   0.24    0.00       0.0   1.4E+06   1.0E+07
+  45     195.0   0.25    0.00       0.0   1.4E+06   1.0E+07
+  55     180.0   0.26    0.00       0.0   1.4E+06   1.0E+07
+  65     165.0   0.28    0.00       0.0   1.0E+06   1.0E+07
+  75     155.0   0.30    0.00       0.0   0.6E+06   1.0E+07
+  85     150.0   0.32    0.00       0.0   0.6E+06   1.0E+07
